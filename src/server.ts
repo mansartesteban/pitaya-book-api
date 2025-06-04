@@ -11,19 +11,15 @@ dotenv.config();
 
 const app = Fastify({ logger: true });
 
-await app.register(cors);
+await app.register(cors, {
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+});
 await app.register(authPlugin);
 await app.register(dbPlugin);
 await app.register(authRoutes, { prefix: "/auth" });
 await app.register(userRoutes, { prefix: "/users" });
 await app.register(accountRoutes, { prefix: "/account" });
-
-app.get("/", async () => ({ message: "API is running 🚀" }));
-
-app.get("/ping-db", async () => {
-  const users = await app.prisma.user.findMany();
-  return { users };
-});
 
 app.listen({ port: Number(process.env.PORT) || 3000 }, (err, addr) => {
   if (err) {

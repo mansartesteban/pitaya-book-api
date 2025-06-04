@@ -6,9 +6,34 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
-  name     String
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  firstname String  @default("")
+  lastname  String  @default("")
+  email     String  @unique
+  phone     String? @default("")
+
+  clientType  ClientType @default(INDIVIDUAL) // Enum for client type
+  companyName String? // Optional if clientType = INDIVIDUAL
+
+  // Auth
+  password    String? // Optional if login via SSO
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+
+  // Relations
+  // albums         Album[]   // If you have albums or galleries
+  // bookings       Booking[] // Future feature for scheduling
+
+  // Meta
+  notes String? // For internal notes
+}
+
+enum ClientType {
+  INDIVIDUAL
+  PROFESSIONAL
 }

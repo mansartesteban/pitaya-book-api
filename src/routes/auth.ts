@@ -8,21 +8,37 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const bodySchema = z.object({
       email: z.string().email(),
       password: z.string().min(6),
-      name: z.string().min(1),
-    });
-    const data = bodySchema.parse(req.body);
-
-    const hashed = await bcrypt.hash(data.password, 10);
-
-    const user = await app.prisma.user.create({
-      data: {
-        email: data.email,
-        password: hashed,
-        name: data.name,
-      },
+      firstname: z.string().min(1),
+      lastname: z.string().min(1),
     });
 
-    return reply.code(201).send({ id: user.id, email: user.email });
+    try {
+      const data = bodySchema.parse(req.body);
+
+      const hashed = await bcrypt.hash(data.password, 10);
+
+      const user = await app.prisma.user.create({
+        data: {
+          email: data.email,
+          password: hashed,
+          firstname: data.firstname,
+          lastname: data.lastname,
+        },
+      });
+
+      return reply.code(201).send({ id: user.id, email: user.email });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return reply.code(400).send({
+          error: "Validation failed",
+          issues: err.errors, // tableau détaillé des erreurs
+        });
+      }
+
+      // autre erreur (ex: DB, bcrypt, etc.)
+      console.error(err);
+      return reply.code(500).send({ error: "Internal server error" });
+    }
   });
 
   // Login
