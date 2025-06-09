@@ -1,5 +1,4 @@
 import { FastifyPluginAsync } from "fastify";
-import { z } from "zod";
 import { UserWithValidationSchema } from "../schemas/user.schema";
 
 const userRoutes: FastifyPluginAsync = async (app) => {
@@ -9,7 +8,6 @@ const userRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/", async (req, res) => {
     const body = UserWithValidationSchema.parse(req.body);
-    console.log("Creating user with data:", body);
     return app.prisma.user.create({ data: body });
   });
 

@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import bcrypt from "bcrypt";
+import fastifyOauth2 from "@fastify/oauth2";
 
 const authRoutes: FastifyPluginAsync = async (app) => {
   // Register
@@ -58,7 +59,11 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const match = await bcrypt.compare(data.password, user.password);
     if (!match) return reply.code(401).send({ error: "Invalid credentials" });
 
-    const token = app.jwt.sign({ id: user.id, email: user.email });
+    const token = app.jwt.sign({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
     return { token };
   });
 
@@ -66,6 +71,57 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/logout", async (req, reply) => {
     // Pour le front, on renvoie juste un 200 OK
     return { message: "Logged out" };
+  });
+
+  app.get("/api/google/callback", async (req, reply) => {
+    const token =
+      await app.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(req);
+    const userInfo = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${token.token.access_token}`,
+        },
+      }
+    ).then((res) => res.json());
+
+    // Vérifie si utilisateur existe ou crée un nouveau
+    const user = await app.prisma.user.upsert({
+      where: { email: userInfo.email },
+      update: { lastLoginAt: new Date() },
+      create: {
+        email: userInfo.email,
+        firstname: userInfo.given_name ?? "",
+        lastname: userInfo.family_name ?? "",
+        password: null,
+        clientType: "INDIVIDUAL",
+        isActive: true,
+      },
+    });
+
+    // Crée et renvoie un token de session
+    const sessionToken = app.jwt.sign({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
+    reply.redirect(
+      `http://localhost:5173/auth/login-success?token=${sessionToken}`
+    );
+  });
+
+  app.register(fastifyOauth2, {
+    name: "googleOAuth2",
+    scope: ["email", "profile"],
+    credentials: {
+      client: {
+        id: process.env.GOOGLE_CLIENT_ID,
+        secret: process.env.GOOGLE_CLIENT_SECRET,
+      },
+      auth: fastifyOauth2.GOOGLE_CONFIGURATION,
+    },
+    startRedirectPath: "/api/google",
+    callbackUri: "http://localhost:3000/auth/api/google/callback",
   });
 };
 

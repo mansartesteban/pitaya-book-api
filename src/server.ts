@@ -6,6 +6,8 @@ import dbPlugin from "./plugins/db";
 import authPlugin from "./plugins/auth";
 import authRoutes from "./routes/auth";
 import accountRoutes from "./routes/account";
+import adminClientRoutes from "./routes/admin/client";
+import { superUser } from "./lib/security/superUser";
 
 dotenv.config();
 
@@ -20,6 +22,10 @@ await app.register(dbPlugin);
 await app.register(authRoutes, { prefix: "/auth" });
 await app.register(userRoutes, { prefix: "/users" });
 await app.register(accountRoutes, { prefix: "/account" });
+await app.register(adminClientRoutes, {
+  prefix: "/admin",
+  preHandler: superUser,
+});
 
 app.listen({ port: Number(process.env.PORT) || 3000 }, (err, addr) => {
   if (err) {

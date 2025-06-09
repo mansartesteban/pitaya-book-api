@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const ClientTypeEnum = z.enum(["INDIVIDUAL", "PROFESSIONAL"]);
+export const ClientTypeEnum = z.enum([
+  "INDIVIDUAL",
+  "PROFESSIONAL",
+  "ASSOCIATION",
+  "OTHER",
+]);
 
 export const UserSchema = z.object({
   id: z.number().int().nonnegative(),

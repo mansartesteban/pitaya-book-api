@@ -17,6 +17,8 @@ model User {
   email     String  @unique
   phone     String? @default("")
 
+  role Roles @default(USER)
+
   clientType  ClientType @default(INDIVIDUAL) // Enum for client type
   companyName String? // Optional if clientType = INDIVIDUAL
 
@@ -36,4 +38,14 @@ model User {
 enum ClientType {
   INDIVIDUAL
   PROFESSIONAL
+  ASSOCIATION
+  OTHER
+}
+
+enum Roles {
+  USER
+  GUEST
+  CLIENT
+  ADMIN
+  SUPERADMIN
 }
