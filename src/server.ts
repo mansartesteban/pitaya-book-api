@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth";
 import accountRoutes from "./routes/account";
 import adminClientRoutes from "./routes/admin/client";
 import { superUser } from "./lib/security/superUser";
+import fastifyMorgan from "morgan";
 
 dotenv.config();
 
