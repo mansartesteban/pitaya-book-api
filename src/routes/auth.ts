@@ -119,6 +119,16 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
       const hashed = await bcrypt.hash(data.password, 10);
 
+      const userFound = await app.prisma.user.findUnique({
+        where: { email: data.email },
+      });
+
+      if (userFound) {
+        return reply
+          .code(409)
+          .send({ errors: { email: "Cet email est déjà pris" } });
+      }
+
       const user = await app.prisma.user.create({
         data: {
           email: data.email,
@@ -131,9 +141,20 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send({ id: user.id, email: user.email });
     } catch (err) {
       if (err instanceof z.ZodError) {
+        const fieldErrors = {};
+        for (const issue of err.errors) {
+          const field = issue.path[0];
+          if (typeof field === "string") {
+            // ne remplace que si la clé est pas encore définie (pour éviter d'écraser la 1re erreur)
+            if (!fieldErrors[field]) {
+              fieldErrors[field] = issue.message;
+            }
+          }
+        }
+
         return reply.code(400).send({
           error: "Validation failed",
-          issues: err.errors, // tableau détaillé des erreurs
+          errors: fieldErrors,
         });
       }
 

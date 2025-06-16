@@ -17,6 +17,8 @@ model User {
   email     String  @unique
   phone     String? @default("")
 
+  emailConfirmed Boolean @default(false)
+
   role Roles @default(USER)
 
   clientType  ClientType @default(INDIVIDUAL) // Enum for client type
