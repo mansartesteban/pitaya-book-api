@@ -60,7 +60,7 @@ const privateRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.put("/profile", { preHandler: [app.authenticate] }, async (req, res) => {
+  app.post("/profile", { preHandler: [app.authenticate] }, async (req, res) => {
     try {
       // Check if the user object exists and contains a valid ID
       if (!req.user || !req.user.id) {
