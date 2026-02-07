@@ -1,2 +1,2 @@
-import { pgSchema } from "drizzle-orm/pg-core"
-export const pitaya = pgSchema("pitaya")
+export * from "./schemas/emailVerification"
+export * from "../modules/user/user.schema"

@@ -1,6 +1,6 @@
 {
-  "id": "5c01d066-aa1e-4d9c-b120-432e8cb915e3",
-  "prevId": "73f8d086-8d3f-42f9-897c-6050b19acdc9",
+  "id": "c9e908c8-b3ff-4808-8850-986945d5624d",
+  "prevId": "debb9abf-1b78-408d-bb47-1e897eb52c8e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -32,6 +32,13 @@
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
         },
         "expires_at": {
           "name": "expires_at",
@@ -86,7 +93,8 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "created_at": {
           "name": "created_at",

@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."users" DROP COLUMN "email_confirmed";

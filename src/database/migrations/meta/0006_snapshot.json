@@ -1,6 +1,6 @@
 {
-  "id": "5c01d066-aa1e-4d9c-b120-432e8cb915e3",
-  "prevId": "73f8d086-8d3f-42f9-897c-6050b19acdc9",
+  "id": "f0ede23c-0adf-4fbe-9742-268cf1b0e978",
+  "prevId": "b9c9dd5e-7ad7-4929-a7b0-dd250b0bc8dd",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -29,9 +29,16 @@
         },
         "token": {
           "name": "token",
-          "type": "varchar(255)",
+          "type": "varchar(1024)",
           "primaryKey": false,
           "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
         },
         "expires_at": {
           "name": "expires_at",
@@ -86,7 +93,8 @@
           "name": "id",
           "type": "uuid",
           "primaryKey": true,
-          "notNull": true
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "created_at": {
           "name": "created_at",
@@ -121,6 +129,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "email_confirmed": {
+          "name": "email_confirmed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
         },
         "phone": {
           "name": "phone",

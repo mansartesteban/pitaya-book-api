@@ -1,6 +1,6 @@
-import { boolean, timestamp, text, serial } from "drizzle-orm/pg-core"
+import { boolean, timestamp, text, uuid } from "drizzle-orm/pg-core"
 
-import { pitaya } from "../schema.js"
+import { pitaya } from "@db"
 
 // Enums
 export const clientType = pitaya.enum("client_type", [
@@ -20,17 +20,15 @@ export const roles = pitaya.enum("roles", [
 
 // Table User
 export const users = pitaya.table("users", {
-  id: serial("id").primaryKey(), // Int auto-increment
+  id: uuid("id").primaryKey().defaultRandom(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 
   firstname: text("firstname").default(""),
   lastname: text("lastname").default(""),
   email: text("email").notNull().unique(),
-  phone: text("phone").default(""),
-
   emailConfirmed: boolean("email_confirmed").default(false),
-
+  phone: text("phone").default(""),
   role: roles("role").default("USER"),
   clientType: clientType("client_type").default("INDIVIDUAL"),
   companyName: text("company_name").$type(),

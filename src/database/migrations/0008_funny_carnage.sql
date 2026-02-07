@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."users" DROP CONSTRAINT "users_email_unique";

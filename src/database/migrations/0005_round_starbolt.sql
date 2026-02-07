@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."email_tokens" ALTER COLUMN "token" SET DATA TYPE varchar(1024);

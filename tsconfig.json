@@ -10,8 +10,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@db/*": ["./src/database/*"],
+      "@db": ["./src/database/index.js"],
+      "@modules/*": ["./src/modules/*"],
+      "@lib/*": ["./src/lib/*"]
     }
   },
-  "include": ["src"]
+  "include": ["."]
 }

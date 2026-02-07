@@ -1,5 +1,6 @@
 import dotenv from "dotenv"
 import { drizzle } from "drizzle-orm/postgres-js"
+import { pgSchema } from "drizzle-orm/pg-core"
 
 dotenv.config()
 
@@ -10,4 +11,7 @@ const db = drizzle({
     // ssl: true,
   },
 })
-export { db }
+
+const pitaya = pgSchema("pitaya")
+
+export { db, pitaya }
