@@ -21,9 +21,39 @@ export const getUser = async (request, reply) => {
       return error(reply, HttpStatus.notFound("User not found"))
     }
 
-    return success(reply, { ...user, username: user.email })
+    return success(reply, { data: { ...user, username: user.email } })
+  } catch (err) {
+    console.error("err", err)
+    request.log.error(err)
+    return error(
+      reply,
+      HttpStatus.internalError(
+        "Erreur lors de la récupération de l'utilisateur"
+      )
+    )
+  }
+}
+
+export const getAllUsers = async (request, reply) => {
+  try {
+    const userList = await db
+      .select({
+        role: users.role,
+        firstname: users.firstname,
+        lastname: users.lastname,
+        email: users.email,
+        emailConfirmed: users.emailConfirmed,
+      })
+      .from(users)
+
+    reply.status(200).send({ success: true, data: userList })
   } catch (err) {
     request.log.error(err)
-    return error(reply, HttpStatus.internalError)
+    return error(
+      reply,
+      HttpStatus.internalError(
+        "Erreur lors de la récupération de l'utilisateur"
+      )
+    )
   }
 }

@@ -1,1 +1,0 @@
-ALTER TABLE "pitaya"."email_tokens" ADD COLUMN "used" boolean DEFAULT false;

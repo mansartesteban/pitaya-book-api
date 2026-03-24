@@ -5,6 +5,7 @@ import {
   verifyEmail,
   forgotPassword,
   resetPassword,
+  signOut,
 } from "./auth.actions"
 import {
   signInFormValidator,
@@ -13,6 +14,7 @@ import {
   resetPasswordValidator,
 } from "./auth.validators"
 import { registerGoogleOAuth } from "./oauth/google"
+import { authenticationMiddleware } from "@/lib/middlewares/authentication"
 
 export default function authRoutes(fastify) {
   fastify.post(
@@ -28,6 +30,13 @@ export default function authRoutes(fastify) {
       preHandler: signUpFormValidator,
     },
     signUp
+  )
+  fastify.post(
+    "/sign-out",
+    {
+      preHandler: [authenticationMiddleware],
+    },
+    signOut
   )
   fastify.post(
     "/forgot-password",

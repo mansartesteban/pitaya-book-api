@@ -1,11 +1,15 @@
 import { error } from "@/lib/responses"
-import jwt from "@fastify/jwt"
 
 export const authenticationMiddleware = async (request, reply) => {
+  const token = request.cookies.access_token
+  if (!token) {
+    return reply.code(401).send({ error: "Not authenticated" })
+  }
+
   try {
-    await request.jwtVerify()
+    request.user = await request.jwtVerify(token)
   } catch (err) {
-    return error(reply, "Invalid token", 401)
+    return reply.code(401).send({ error: "Invalid token" })
   }
 }
 

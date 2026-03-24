@@ -4,7 +4,7 @@ import { filterObject } from "@lib/utils/Object.js"
 
 // Créer un validator
 export function createValidator(schema, options = {}) {
-  const { source = "body", target = "body", stopOnError = true } = options
+  const { source = "body", target = source, stopOnError = true } = options
 
   return async (request, reply) => {
     const data = request[source]
@@ -25,17 +25,27 @@ export function createValidator(schema, options = {}) {
 
     // Si erreurs, stopper
     if (Object.keys(errors).length > 0) {
-      return error(
-        reply,
-        HttpStatus.badRequest("Erreur de validation du formulaire"),
-        { validation: errors }
-      )
+      console.log("Validation errors:", errors)
+
+      let status
+      if (options.source === "params") {
+        status = HttpStatus.badRequest(
+          "Erreur de validation des paramètres d'url"
+        )
+      } else {
+        status = HttpStatus.badRequest("Erreur de validation du formulaire")
+      }
+      return error(reply, {
+        status: status,
+        validation: errors,
+      })
     }
 
     // Stocker les données validées
-    request.validated = {
-      [target]: filterObject(data, Object.keys(schema)),
+    if (request.validated === undefined) {
+      request.validated = {}
     }
+    request.validated[target] = filterObject(data, Object.keys(schema))
   }
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."companies" ADD COLUMN "vat_number" text;

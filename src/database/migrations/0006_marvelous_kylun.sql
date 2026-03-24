@@ -1,1 +1,0 @@
-ALTER TABLE "pitaya"."users" ADD COLUMN "email_confirmed" boolean DEFAULT false;

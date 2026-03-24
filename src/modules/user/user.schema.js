@@ -30,8 +30,6 @@ export const users = pitaya.table("users", {
   emailConfirmed: boolean("email_confirmed").default(false),
   phone: text("phone").default(""),
   role: roles("role").default("USER"),
-  clientType: clientType("client_type").default("INDIVIDUAL"),
-  companyName: text("company_name").$type(),
 
   // Auth
   password: text("password").$type(),

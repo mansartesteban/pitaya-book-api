@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."photos" ADD COLUMN "extension" text NOT NULL;

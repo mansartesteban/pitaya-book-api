@@ -187,7 +187,6 @@ export async function findOrCreateGoogleUser(googleUserInfo) {
       firstname: googleUserInfo.given_name ?? "",
       lastname: googleUserInfo.family_name ?? "",
       password: null,
-      clientType: "INDIVIDUAL",
       isActive: true,
     })
     .onConflictDoUpdate({

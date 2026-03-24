@@ -37,10 +37,18 @@ export const signIn = async (request, reply) => {
       role: userFound.role,
     })
 
-    return success(reply, { token })
+    reply.setCookie("access_token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+
+    return success(reply, { message: "Connexion réussie !" })
   } catch (err) {
+    console.error("err", err)
     request.log.error(err)
-    return error(reply, HttpStatus.internalError)
+    return error(reply, HttpStatus.internalError("Erreur lors de la connexion"))
   }
 }
 
@@ -105,60 +113,88 @@ export const signUp = async (request, reply) => {
       role: insertedUser.role,
     })
 
+    reply.setCookie("access_token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+
     return created(reply, {
-      token,
       message:
         "Un email de vérification vous a été envoyé, il est valable 24h. Passé ce délai, rendez vous sur les paramètres du compte pour renvoyer un email de vérification",
     })
   } catch (err) {
+    console.error("err", err)
     request.log.error(err)
-    return error(reply, HttpStatus.internalError)
+    return error(
+      reply,
+      HttpStatus.internalError("Erreur lors de l'inscription")
+    )
   }
 }
 
+export const signOut = async (request, reply) => {
+  reply.clearCookie("access_token", {
+    path: "/",
+  })
+  return reply.send({ success: true, message: "Vous avez été déconnecté" })
+}
+
 export const forgotPassword = async (request, reply) => {
-  const [userFound] = await db
-    .select({
-      email: users.email,
-      id: users.id,
-      role: users.role,
-      firstname: users.firstname,
-    })
-    .from(users)
-    .where(eq(users.email, request.validated.body.email))
+  try {
+    const [userFound] = await db
+      .select({
+        email: users.email,
+        id: users.id,
+        role: users.role,
+        firstname: users.firstname,
+      })
+      .from(users)
+      .where(eq(users.email, request.validated.body.email))
 
-  if (!userFound) {
-    return success(reply, { message: "Email envoyé" })
-  }
-
-  const expiresInMs = 24 * 60 * 60 * 1000
-  const expiresAt = new Date(Date.now() + expiresInMs)
-  const verificationToken = await reply.jwtSign(
-    {
-      id: userFound.id,
-      email: userFound.email,
-      type: "reset_password",
-    },
-    {
-      expiresIn: "24h",
+    if (!userFound) {
+      return success(reply, { message: "Email envoyé" })
     }
-  )
 
-  const [insertedEmailToken] = await db
-    .insert(emailTokens)
-    .values({
-      userId: userFound.id,
-      type: "reset_password",
-      token: verificationToken,
-      expiresAt,
-    })
-    .returning()
+    const expiresInMs = 24 * 60 * 60 * 1000
+    const expiresAt = new Date(Date.now() + expiresInMs)
+    const verificationToken = await reply.jwtSign(
+      {
+        id: userFound.id,
+        email: userFound.email,
+        type: "reset_password",
+      },
+      {
+        expiresIn: "24h",
+      }
+    )
 
-  const resetUrl = `${process.env.FRONTEND_URL}/authentication/reset-password?token=${verificationToken}`
+    const [insertedEmailToken] = await db
+      .insert(emailTokens)
+      .values({
+        userId: userFound.id,
+        type: "reset_password",
+        token: verificationToken,
+        expiresAt,
+      })
+      .returning()
 
-  sendResetMail(userFound, resetUrl)
+    const resetUrl = `${process.env.FRONTEND_URL}/authentication/reset-password?token=${verificationToken}`
 
-  return success(reply, { message: "Email envoyé" })
+    sendResetMail(userFound, resetUrl)
+
+    return success(reply, { message: "Email envoyé" })
+  } catch (err) {
+    console.error("err", err)
+    request.log.error(err)
+    return error(
+      reply,
+      HttpStatus.internalError(
+        "Erreur lors de la réinitialisation du mot de passe"
+      )
+    )
+  }
 }
 
 export const resetPassword = async (request, reply) => {
@@ -168,6 +204,7 @@ export const resetPassword = async (request, reply) => {
     try {
       payload = jwt.verify(request.validated.body.token, process.env.JWT_SECRET)
     } catch (err) {
+      console.error("err", err)
       return error(
         reply,
         HttpStatus.unauthorized(
@@ -216,8 +253,14 @@ export const resetPassword = async (request, reply) => {
 
     return success(reply, { message: "Votre mot de passe a bien été modifié" })
   } catch (err) {
+    console.error("err", err)
     request.log.error(err)
-    return error(reply, HttpStatus.internalError)
+    return error(
+      reply,
+      HttpStatus.internalError(
+        "Erreur lors de la réinitialisation du mot de passe"
+      )
+    )
   }
 }
 
@@ -235,7 +278,8 @@ export const verifyEmail = async (request, reply) => {
     let payload
     try {
       payload = jwt.verify(request.body.token, process.env.JWT_SECRET)
-    } catch {
+    } catch (err) {
+      console.error("err", err)
       return error(
         reply,
         HttpStatus.unauthorized(
@@ -287,13 +331,23 @@ export const verifyEmail = async (request, reply) => {
       role: userFound.role,
     })
 
+    reply.setCookie("access_token", authToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+
     return success(reply, {
       message: "Votre adresse email a bien été vérifiée",
-      token: authToken,
     })
   } catch (err) {
+    console.error("err", err)
     request.log.error(err)
-    return error(reply, HttpStatus.internalError)
+    return error(
+      reply,
+      HttpStatus.internalError("Erreur lors de la vérification de l'email")
+    )
   }
 }
 
@@ -318,11 +372,19 @@ export const googleCallback = async (request, reply) => {
       role: user.role,
     })
 
+    reply.setCookie("access_token", sessionToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+    })
+
     // Redirection vers le frontend
     return reply.redirect(
-      `${process.env.FRONTEND_URL}/authentication/sign-in-success?token=${sessionToken}`
+      `${process.env.FRONTEND_URL}/authentication/sign-in-success`
     )
   } catch (err) {
+    console.error("err", err)
     request.log?.error(err)
     return reply.redirect(
       `${process.env.FRONTEND_URL}/authentication/sign-in-error`

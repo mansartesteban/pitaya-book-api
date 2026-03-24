@@ -45,13 +45,4 @@ export const updateProfileValidator = createValidator({
   ],
   email: emailRules,
   phone: phoneRules,
-  clientType: [
-    rules.required,
-    rules.oneOf(["INDIVIDUAL", "PROFESSIONAL", "ASSOCIATION", "OTHER"]),
-  ],
-  companyName: [
-    rules.minLength(2),
-    rules.maxLength(100),
-    rules.matches(/^[a-zA-Z0-9À-ÿ\s&'.,()-]+$/, "Invalid company name format"),
-  ],
 })

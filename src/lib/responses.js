@@ -1,38 +1,45 @@
 import { HttpStatus } from "./HttpStatus"
 
-export const respond = (reply, status, data) => {
+export const respond = (
+  reply,
+  { status, message = null, data = null, validation = null }
+) => {
   if (typeof status === "function") {
     status = status()
   }
-
-  let response = {
+  return reply.status(status.code).send({
     success: status.code < 400,
-    message: status?.message,
     code: status.code,
-  }
-
-  if (data?.validation) {
-    response.validation = data.validation
-    delete data.validation
-  }
-
-  response.data = data
-
-  return reply.status(status.code).send(response)
+    message: message ?? status.message ?? null,
+    data,
+    validation,
+  })
 }
 
-export const success = (reply, data) => {
-  return respond(
-    reply,
-    HttpStatus.ok(data?.message || undefined),
-    data?.message ? (({ message, ...all }) => all)(data) : data
-  )
+export const success = (reply, { data = null, message = null } = {}) => {
+  return respond(reply, {
+    status: HttpStatus.ok,
+    message,
+    data,
+  })
 }
 
-export const created = (reply, data) => {
-  return respond(reply, HttpStatus.created(data?.message || undefined), data)
+export const created = (reply, { data = null, message = null } = {}) => {
+  return respond(reply, {
+    status: HttpStatus.created,
+    message,
+    data,
+  })
 }
 
-export const error = (reply, status, data) => {
-  return respond(reply, status, data)
+export const error = (
+  reply,
+  { status, message = null, data = null, validation = null }
+) => {
+  return respond(reply, {
+    status,
+    message,
+    data,
+    validation,
+  })
 }
