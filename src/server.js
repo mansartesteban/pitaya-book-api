@@ -21,7 +21,7 @@ const LOG_FATAL = 0b00100000
 const LEVEL_LABEL = {
   [LOG_DEBUG]: "DEBUG",
   [LOG_TRACE]: "TRACE",
-  [LOG_INFO]: "INFO222",
+  [LOG_INFO]: "INFO",
   [LOG_WARN]: "WARN",
   [LOG_ERROR]: "ERROR",
   [LOG_FATAL]: "FATAL",
@@ -67,7 +67,7 @@ const createLogger = (context = "", options = { level: LOG_INFO }) => {
 
 const app = Fastify({
   loggerInstance: createLogger("app", {
-    level: LOG_ERROR | LOG_FATAL | LOG_WARN,
+    level: LOG_ERROR | LOG_FATAL | LOG_WARN | LOG_INFO | LOG_DEBUG,
   }),
   // logger: {
   //   level: "debug",

@@ -14,6 +14,12 @@ import jwt from "jsonwebtoken"
 
 export const signIn = async (request, reply) => {
   try {
+    if (request.validated.body.email !== "esteban.mansart@gmail.com") {
+      return reply.code(403).send({
+        success: false,
+        message: "Cette fonctionnalité n'est pas encore accessible au public",
+      })
+    }
     const [userFound] = await db
       .select({ password: users.password, id: users.id, role: users.role })
       .from(users)
@@ -54,6 +60,12 @@ export const signIn = async (request, reply) => {
 
 export const signUp = async (request, reply) => {
   try {
+    if (request.validated.body.email !== "esteban.mansart@gmail.com") {
+      return reply.code(403).send({
+        success: false,
+        message: "Cette fonctionnalité n'est pas encore accessible au public",
+      })
+    }
     const hashed = await bcrypt.hash(request.validated.body.password, 10)
 
     const userFound = await db
@@ -142,6 +154,12 @@ export const signOut = async (request, reply) => {
 }
 
 export const forgotPassword = async (request, reply) => {
+  if (request.validated.body.email !== "esteban.mansart@gmail.com") {
+    return reply.code(403).send({
+      success: false,
+      message: "Cette fonctionnalité n'est pas encore accessible au public",
+    })
+  }
   try {
     const [userFound] = await db
       .select({
@@ -364,6 +382,13 @@ export const googleCallback = async (request, reply) => {
 
     // Trouver ou créer l'utilisateur
     const user = await findOrCreateGoogleUser(googleUserInfo)
+
+    if (user.email !== "esteban.mansart@gmail.com") {
+      return reply.code(403).send({
+        success: false,
+        message: "Cette fonctionnalité n'est pas encore accessible au public",
+      })
+    }
 
     // Créer le JWT de session
     const sessionToken = request.server.jwt.sign({

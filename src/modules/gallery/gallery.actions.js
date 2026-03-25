@@ -7,6 +7,7 @@ import crypto from "node:crypto"
 import archiver from "archiver"
 import sharp from "sharp"
 import { pipeline } from "node:stream/promises"
+import { signPhotoUrl } from "../../lib/utils/Photo"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -67,6 +68,37 @@ export const getAllGalleries = async (request, reply) => {
           gallery.parentGallery = parentGallery
         }
       }
+      const descendants = await db.execute(sql`
+          WITH RECURSIVE descendants AS (
+            SELECT id, parent_gallery_id
+            FROM galleries
+            WHERE id = ${gallery.id}
+        
+            UNION ALL
+        
+            SELECT g.id, g.parent_gallery_id
+            FROM galleries g
+            INNER JOIN descendants d ON g.parent_gallery_id = d.id
+          )
+          SELECT id FROM descendants;
+        `)
+      gallery.downRelations = descendants.map((d) => d.id)
+
+      const ancestors = await db.execute(sql`
+          WITH RECURSIVE ancestors AS (
+            SELECT id, parent_gallery_id
+            FROM galleries
+            WHERE id = ${gallery.id}
+    
+            UNION ALL
+    
+            SELECT g.id, g.parent_gallery_id
+            FROM galleries g
+            INNER JOIN ancestors a ON g.id = a.parent_gallery_id
+          )
+          SELECT id FROM ancestors;
+        `)
+      gallery.upRelations = ancestors.map((d) => d.id)
 
       const childrenGalleries = await db
         .select({
@@ -205,17 +237,17 @@ export const getOneGallery = async (request, reply) => {
     `)
     foundGallery.upRelations = ancestors.map((d) => d.id)
 
-    const galleryPhotos = await db
+    const foundPhotos = await db
       .select({
         id: photos.id,
         name: photos.name,
-        url: photos.url,
         size: photos.size,
         filename: photos.filename,
         extension: photos.extension,
         ratio: photos.ratio,
         width: photos.width,
         height: photos.height,
+        galleryId: photos.galleryId,
       })
       .from(photos)
       .where(eq(photos.galleryId, galleryId))
@@ -226,33 +258,14 @@ export const getOneGallery = async (request, reply) => {
       )[0]
     )
 
-    let securityKey = process.env.BUNNY_AUTH_URL_TOKEN
-    let expires = Math.round(Date.now() / 1000) + 5
-
-    foundGallery.photos = galleryPhotos.map((photo) => {
-      var hashableBase = securityKey + photo.url + expires
-      let md5String = crypto
-        .createHash("md5")
-        .update(hashableBase)
-        .digest("binary")
-      let token = Buffer.from(md5String, "binary").toString("base64")
-      token = token.replace(/\+/g, "-").replace(/\//g, "_").replace(/\=/g, "")
-
-      photo.url =
-        process.env.PHOTO_CDN_URI +
-        photo.url +
-        "?token=" +
-        token +
-        "&expires=" +
-        expires
-      photo.filename = [photo.filename, photo.extension].join(".")
+    foundGallery.photos = foundPhotos.map((photo) => {
+      photo.urls = {
+        300: signPhotoUrl(photo, true, 300),
+        600: signPhotoUrl(photo, true, 600),
+        original: signPhotoUrl(photo, true),
+      }
       return photo
     })
-
-    // const subfolderFiles = await BunnyStorageSDK.file.list(
-    //   storageZone,
-    //   "/my-folder",
-    // );
 
     return reply.code(200).send({ success: true, data: foundGallery })
   } catch (err) {
@@ -416,7 +429,6 @@ export const uploadPhoto = async (request, reply) => {
       chunks.push(chunk)
     }
     const buffer = Buffer.concat(chunks)
-
     const metadata = await sharp(buffer).metadata()
 
     const { galleryId } = request.validated.params
@@ -451,6 +463,21 @@ export const uploadPhoto = async (request, reply) => {
     let filename = splittedFilename.join(".")
     let uploadName = [photoId, extension].join(".")
 
+    let thumbnailSizes = [300, 600]
+
+    for (let size of thumbnailSizes) {
+      const resizedBuffer = await sharp(buffer)
+        .resize({ width: size })
+        .jpeg({ quality: 80 })
+        .toBuffer()
+
+      await BunnyStorageSDK.file.upload(
+        storageZone,
+        `/${foundGallery.id}/thumbnails-${size}/${uploadName}`,
+        resizedBuffer
+      )
+    }
+
     const response = await BunnyStorageSDK.file.upload(
       storageZone,
       `/${foundGallery.id}/${uploadName}`,
@@ -466,6 +493,7 @@ export const uploadPhoto = async (request, reply) => {
     const [insertedPhoto] = await db
       .insert(photos)
       .values({
+        id: photoId,
         galleryId: galleryId,
         name: uploadName,
         size: part.file.bytesRead,
@@ -478,37 +506,21 @@ export const uploadPhoto = async (request, reply) => {
       })
       .returning({
         name: photos.name,
-        url: photos.url,
         extension: photos.extension,
         filename: photos.filename,
         width: photos.width,
         height: photos.height,
         ratio: photos.ratio,
         size: photos.size,
+        id: photos.id,
+        galleryId: photos.galleryId,
       })
 
-    let securityKey = process.env.BUNNY_AUTH_URL_TOKEN
-    let expires = Math.round(Date.now() / 1000) + 5
-
-    var hashableBase = securityKey + insertedPhoto.url + expires
-    let md5String = crypto
-      .createHash("md5")
-      .update(hashableBase)
-      .digest("binary")
-    let token = Buffer.from(md5String, "binary").toString("base64")
-    token = token.replace(/\+/g, "-").replace(/\//g, "_").replace(/\=/g, "")
-
-    insertedPhoto.url =
-      process.env.PHOTO_CDN_URI +
-      insertedPhoto.url +
-      "?token=" +
-      token +
-      "&expires=" +
-      expires
-    insertedPhoto.filename = [
-      insertedPhoto.filename,
-      insertedPhoto.extension,
-    ].join(".")
+    insertedPhoto.urls = {
+      300: signPhotoUrl(insertedPhoto, true, 300),
+      600: signPhotoUrl(insertedPhoto, true, 600),
+      original: signPhotoUrl(insertedPhoto, true),
+    }
 
     return reply.code(200).send({ success: true, data: insertedPhoto })
   } catch (err) {
@@ -525,7 +537,7 @@ export const deletePhoto = async (request, reply) => {
   try {
     const { photoId, galleryId } = request.validated.params
     const [foundPhoto] = await db
-      .select({ url: photos.url })
+      .select({ extension: photos.extension })
       .from(photos)
       .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
 
@@ -535,10 +547,25 @@ export const deletePhoto = async (request, reply) => {
         .send({ success: false, message: "La photo est introuvable" })
     }
 
+    await BunnyStorageSDK.file.remove(
+      storageZone,
+      [
+        ["", galleryId, "thumbnails-300", photoId].join("/"),
+        foundPhoto.extension,
+      ].join(".")
+    )
+    await BunnyStorageSDK.file.remove(
+      storageZone,
+      [
+        ["", galleryId, "thumbnails-600", photoId].join("/"),
+        foundPhoto.extension,
+      ].join(".")
+    )
     const deleted = await BunnyStorageSDK.file.remove(
       storageZone,
-      foundPhoto.url
+      [["", galleryId, photoId].join("/"), foundPhoto.extension].join(".")
     )
+
     if (deleted) {
       await db
         .delete(photos)
@@ -566,7 +593,7 @@ export const deleteMultiplePhotos = async (request, reply) => {
     const { galleryId } = request.validated.params
 
     const foundPhotos = await db
-      .select({ id: photos.id, url: photos.url })
+      .select({ id: photos.id, extension: photos.extension })
       .from(photos)
       .where(
         and(inArray(photos.id, photosToDelete), eq(photos.galleryId, galleryId))
@@ -574,10 +601,28 @@ export const deleteMultiplePhotos = async (request, reply) => {
 
     let deletedPhotos = []
     for (let photo of foundPhotos) {
-      const deleted = await BunnyStorageSDK.file.remove(storageZone, photo.url)
+      const deleted = await BunnyStorageSDK.file.remove(
+        storageZone,
+        [["", galleryId, photo.id].join("/"), photo.extension].join(".")
+      )
       if (deleted) {
         deletedPhotos.push(photo)
       }
+
+      await BunnyStorageSDK.file.remove(
+        storageZone,
+        [
+          ["", galleryId, "thumbnails-300", photo.id].join("/"),
+          photo.extension,
+        ].join(".")
+      )
+      await BunnyStorageSDK.file.remove(
+        storageZone,
+        [
+          ["", galleryId, "thumbnails-600", photo.id].join("/"),
+          photo.extension,
+        ].join(".")
+      )
     }
 
     await db.delete(photos).where(
