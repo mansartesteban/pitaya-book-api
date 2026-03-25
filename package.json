@@ -10,7 +10,7 @@
     "dev": "pnpm i && node --import ./loader.js --watch src/server.js",
     "dev2": "pnpm i && nodemon --watch src --ext js --exec node src/server.js",
     "build": "tsc",
-    "start": "node build/server.js",
+    "start": "node --import ./loader.js src/server.js",
     "lint": "eslint . --ext .ts"
   },
   "dependencies": {
