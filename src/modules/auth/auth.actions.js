@@ -1,14 +1,12 @@
-import { success, error, created } from "@lib/responses"
-import { HttpStatus } from "@lib/httpStatus"
 import {
   findOrCreateGoogleUser,
   fetchGoogleUserInfo,
   sendVerificationMail,
   sendResetMail,
-} from "./auth.service"
+} from "./auth.service.js"
 import { eq } from "drizzle-orm"
-import { db } from "@db"
-import { users, emailTokens } from "@db/schema"
+import { db } from "../../database/index.js"
+import { users, emailTokens } from "../../database/schema.js"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 
@@ -26,7 +24,9 @@ export const signIn = async (request, reply) => {
       .where(eq(users.email, request.validated.body.email))
 
     if (!userFound) {
-      return error(reply, HttpStatus.unauthorized("Invalid credentials"))
+      return reply
+        .code(403)
+        .send({ success: false, message: "Invalid credentials" })
     }
 
     const match = await bcrypt.compare(
@@ -34,7 +34,9 @@ export const signIn = async (request, reply) => {
       userFound.password
     )
     if (!match) {
-      return error(reply, HttpStatus.unauthorized("Invalid credentials"))
+      return reply
+        .code(403)
+        .send({ success: false, message: "Invalid credentials" })
     }
 
     const token = await reply.jwtSign({
@@ -50,11 +52,14 @@ export const signIn = async (request, reply) => {
       path: "/",
     })
 
-    return success(reply, { message: "Connexion réussie !" })
+    return reply
+      .status(200)
+      .send({ success: true, message: "Connexion réussie !" })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(reply, HttpStatus.internalError("Erreur lors de la connexion"))
+    return reply
+      .code(500)
+      .send({ success: false, message: "Erreur lors de la connexion" })
   }
 }
 
@@ -74,7 +79,9 @@ export const signUp = async (request, reply) => {
       .where(eq(users.email, request.validated.body.email))
 
     if (userFound.length > 0) {
-      return error(reply, HttpStatus.conflict("Cet email est déjà pris"))
+      return reply
+        .code(409)
+        .send({ success: false, message: "Cet email est déjà pris" })
     }
 
     const [insertedUser] = await db
@@ -132,17 +139,16 @@ export const signUp = async (request, reply) => {
       path: "/",
     })
 
-    return created(reply, {
+    return reply.code(201).send({
+      success: true,
       message:
         "Un email de vérification vous a été envoyé, il est valable 24h. Passé ce délai, rendez vous sur les paramètres du compte pour renvoyer un email de vérification",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de l'inscription")
-    )
+    return reply
+      .code(500)
+      .send({ success: false, message: "Erreur lors de l'inscription" })
   }
 }
 
@@ -150,7 +156,9 @@ export const signOut = async (request, reply) => {
   reply.clearCookie("access_token", {
     path: "/",
   })
-  return reply.send({ success: true, message: "Vous avez été déconnecté" })
+  return reply
+    .code(204)
+    .send({ success: true, message: "Vous avez été déconnecté" })
 }
 
 export const forgotPassword = async (request, reply) => {
@@ -172,7 +180,9 @@ export const forgotPassword = async (request, reply) => {
       .where(eq(users.email, request.validated.body.email))
 
     if (!userFound) {
-      return success(reply, { message: "Email envoyé" })
+      return reply
+        .code(404)
+        .send({ success: false, message: "Invalid credentials" })
     }
 
     const expiresInMs = 24 * 60 * 60 * 1000
@@ -202,16 +212,13 @@ export const forgotPassword = async (request, reply) => {
 
     sendResetMail(userFound, resetUrl)
 
-    return success(reply, { message: "Email envoyé" })
+    return reply.code(200).send({ success: true, message: "Email envoyé" })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError(
-        "Erreur lors de la réinitialisation du mot de passe"
-      )
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la réinitialisation du mot de passe",
+    })
   }
 }
 
@@ -222,16 +229,16 @@ export const resetPassword = async (request, reply) => {
     try {
       payload = jwt.verify(request.validated.body.token, process.env.JWT_SECRET)
     } catch (err) {
-      console.error("err", err)
-      return error(
-        reply,
-        HttpStatus.unauthorized(
-          "Ce lien de vérification est invalide ou expiré"
-        )
-      )
+      request.log.error("err", err)
+      return reply.code(401).send({
+        success: false,
+        message: "Ce lien de vérification est invalide ou expiré",
+      })
     }
     if (payload.type !== "reset_password") {
-      return error(reply, HttpStatus.unauthorized("Type de token invalide"))
+      return reply
+        .code(401)
+        .send({ success: false, message: "Type de token invalide" })
     }
 
     // 2. Vérification de l'existence du lien
@@ -240,18 +247,17 @@ export const resetPassword = async (request, reply) => {
       .from(emailTokens)
       .where(eq(emailTokens.token, request.validated.body.token))
     if (!emailToken) {
-      return error(
-        reply,
-        HttpStatus.unauthorized("Ce lien de vérification n'est plus valide")
-      )
+      return reply.code(401).send({
+        success: false,
+        message: "Ce lien de vérification n'est plus valide",
+      })
     }
 
     // 3. Vérification de l'expiration du token
     if (emailToken.expiresAt < new Date()) {
-      return error(
-        reply,
-        HttpStatus.unauthorized("Ce lien de vérification a expiré")
-      )
+      return reply
+        .code(401)
+        .send({ success: false, message: "Ce lien de vérification a expiré" })
     }
 
     // 4. Changement du mot de passe
@@ -269,16 +275,16 @@ export const resetPassword = async (request, reply) => {
     // 5. Invalidation du lien de réinitialisation
     await db.delete(emailTokens).where(eq(emailTokens.id, emailToken.id))
 
-    return success(reply, { message: "Votre mot de passe a bien été modifié" })
+    return reply.code(200).send({
+      success: true,
+      message: "Votre mot de passe a bien été modifié",
+    })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError(
-        "Erreur lors de la réinitialisation du mot de passe"
-      )
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la réinitialisation du mot de passe",
+    })
   }
 }
 
@@ -287,27 +293,27 @@ export const verifyEmail = async (request, reply) => {
     const { token } = request.body
 
     if (!token) {
-      return error(
-        reply,
-        HttpStatus.unauthorized("Lien de vérification invalide ou manquant")
-      )
+      return reply.code(401).send({
+        success: false,
+        message: "Lien de vérification invalide ou manquant",
+      })
     }
 
     let payload
     try {
       payload = jwt.verify(request.body.token, process.env.JWT_SECRET)
     } catch (err) {
-      console.error("err", err)
-      return error(
-        reply,
-        HttpStatus.unauthorized(
-          "Ce lien de vérification est invalide ou expiré"
-        )
-      )
+      request.log.error("err", err)
+      return reply.code(401).send({
+        success: false,
+        message: "Ce lien de vérification est invalide ou expiré",
+      })
     }
 
     if (payload.type !== "email_verification") {
-      return error(reply, HttpStatus.unauthorized("Type de token invalide"))
+      return reply
+        .code(401)
+        .send({ success: false, message: "Type de token invalide" })
     }
 
     // 2. Vérification en BDD
@@ -317,18 +323,17 @@ export const verifyEmail = async (request, reply) => {
       .where(eq(emailTokens.token, token))
 
     if (!emailToken) {
-      return error(
-        reply,
-        HttpStatus.unauthorized("Ce lien de vérification n'est plus valide")
-      )
+      return reply.code(401).send({
+        success: false,
+        message: "Ce lien de vérification n'est plus valide",
+      })
     }
 
     // 3. Expiration BDD (sécurité supplémentaire)
     if (emailToken.expiresAt < new Date()) {
-      return error(
-        reply,
-        HttpStatus.unauthorized("Ce lien de vérification a expiré")
-      )
+      return reply
+        .code(401)
+        .send({ success: false, message: "Ce lien de vérification a expiré" })
     }
 
     // 4. Activation du compte
@@ -356,16 +361,16 @@ export const verifyEmail = async (request, reply) => {
       path: "/",
     })
 
-    return success(reply, {
+    return reply.code(200).send({
+      success: true,
       message: "Votre adresse email a bien été vérifiée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la vérification de l'email")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la vérification de l'email",
+    })
   }
 }
 
@@ -409,7 +414,6 @@ export const googleCallback = async (request, reply) => {
       `${process.env.FRONTEND_URL}/authentication/sign-in-success`
     )
   } catch (err) {
-    console.error("err", err)
     request.log?.error(err)
     return reply.redirect(
       `${process.env.FRONTEND_URL}/authentication/sign-in-error`

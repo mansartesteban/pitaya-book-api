@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer"
-import { users } from "../user/user.schema"
-import { db } from "@db"
+import { users } from "../user/user.schema.js"
+import { db } from "../../database/index.js"
 
 const transportConfig = {
   host: process.env.SMTP_SERVER,

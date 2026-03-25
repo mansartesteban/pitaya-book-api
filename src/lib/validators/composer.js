@@ -1,6 +1,4 @@
-import { HttpStatus } from "@lib/HttpStatus.js"
-import { error } from "@lib/responses.js"
-import { filterObject } from "@lib/utils/Object.js"
+import { filterObject } from "../utils/Object.js"
 
 // Créer un validator
 export function createValidator(schema, options = {}) {
@@ -25,20 +23,17 @@ export function createValidator(schema, options = {}) {
 
     // Si erreurs, stopper
     if (Object.keys(errors).length > 0) {
-      console.log("Validation errors:", errors)
+      request.log.error("Validation errors:", errors)
 
-      let status
+      let message
       if (options.source === "params") {
-        status = HttpStatus.badRequest(
-          "Erreur de validation des paramètres d'url"
-        )
+        message = "Erreur de validation des paramètres d'url"
       } else {
-        status = HttpStatus.badRequest("Erreur de validation du formulaire")
+        message = "Erreur de validation du formulaire"
       }
-      return error(reply, {
-        status: status,
-        validation: errors,
-      })
+      return reply
+        .code(400)
+        .send({ success: false, message, validation: errors })
     }
 
     // Stocker les données validées

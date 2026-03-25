@@ -1,5 +1,5 @@
-import { postContact } from "./main.actions"
-import { contactValidator } from "./main.validators"
+import { postContact } from "./main.actions.js"
+import { contactValidator } from "./main.validators.js"
 
 export default function mainRoutes(fastify) {
   fastify.post(

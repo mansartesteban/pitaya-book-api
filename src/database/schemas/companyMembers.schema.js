@@ -1,7 +1,7 @@
 import { timestamp, unique, uuid } from "drizzle-orm/pg-core"
-import { users } from "../schema"
-import { companies } from "./company.schema"
-import { pitaya } from "@db"
+import { users } from "../schema.js"
+import { companies } from "./company.schema.js"
+import { pitaya } from "../index.js"
 
 export const companyMemberRole = pitaya.enum("company_member_role", [
   "ADMIN",

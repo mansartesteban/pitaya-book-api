@@ -1,7 +1,5 @@
-import { db } from "@db"
-import { companies } from "../../database/schema"
-import { success, error, created } from "@lib/responses"
-import { HttpStatus } from "@lib/httpStatus"
+import { db } from "../../database/index.js"
+import { companies } from "../../database/schema.js"
 import { eq } from "drizzle-orm"
 
 export const getAllCompanies = async (request, reply) => {
@@ -16,14 +14,13 @@ export const getAllCompanies = async (request, reply) => {
         vatNumber: companies.vatNumber,
       })
       .from(companies)
-    return success(reply, { data: results })
+    return reply.code(200).send({ success: true, data: results })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la récupération des sociétés")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération des sociétés",
+    })
   }
 }
 
@@ -39,14 +36,15 @@ export const createCompany = async (request, reply) => {
         vatNumber: request.validated.body.vatNumber,
       })
       .returning()
-    return created(reply, { data: insertedCompany, message: "Société créée" })
+    return reply
+      .code(201)
+      .send({ success: true, data: insertedCompany, message: "Société créée" })
   } catch (err) {
-    console.log("error", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la création de la société")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la création de la société",
+    })
   }
 }
 export const updateCompany = async (request, reply) => {
@@ -64,19 +62,17 @@ export const updateCompany = async (request, reply) => {
       })
       .where(eq(companies.id, companyId))
       .returning()
-    return reply
-      .status(200)
-      .send({
-        success: true,
-        data: updatedCompany,
-        message: "Société modifiée",
-      })
+    return reply.status(200).send({
+      success: true,
+      data: updatedCompany,
+      message: "Société modifiée",
+    })
   } catch (err) {
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la création de la société")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la création de la société",
+    })
   }
 }
 
@@ -86,14 +82,13 @@ export const deleteCompany = async (request, reply) => {
       .delete(companies)
       .where(eq(companies.id, request.validated.params.companyId))
       .returning()
-    return success(reply, { message: "Société supprimée" })
+    return reply.code(200).send({ success: true, message: "Société supprimée" })
   } catch (err) {
-    console.log("error", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la suppression de la société")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la suppression de la société",
+    })
   }
 }
 
@@ -110,13 +105,12 @@ export const getCompany = async (request, reply) => {
       })
       .from(companies)
       .where(eq(companies.id, request.validated.params.companyId))
-    return success(reply, { data: response })
+    return reply.code(200).send({ success: true, data: response })
   } catch (err) {
-    console.log("error", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la récupération de la société")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération de la société",
+    })
   }
 }

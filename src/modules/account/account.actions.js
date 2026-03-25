@@ -1,8 +1,6 @@
-import { db } from "@db"
-import { users } from "@db/schema"
-import { error, success } from "@lib/responses"
+import { db } from "../../database/index.js"
+import { users } from "../../database/schema.js"
 import { eq } from "drizzle-orm"
-import { HttpStatus } from "@/lib/httpStatus"
 import bcrypt from "bcrypt"
 
 export const getProfile = async (request, reply) => {
@@ -19,18 +17,16 @@ export const getProfile = async (request, reply) => {
       .where(eq(users.id, request.user.id))
 
     if (!foundAccount) {
-      return error(reply, HttpStatus.notFound("User not found"))
+      return reply.code(404).send({ success: false, message: "User not found" })
     }
 
-    return success(reply, { data: foundAccount })
+    return reply.code(200).send({ success: true, data: foundAccount })
   } catch (err) {
-    console.error("err", err)
-
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la récupération du profil")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération du profil",
+    })
   }
 }
 
@@ -55,16 +51,18 @@ export const updateProfile = async (request, reply) => {
       .returning({ ...fields, id: users.id })
 
     if (updatedUser.length === 0) {
-      return error(reply, HttpStatus.notFound("User not found"))
+      return reply.code(404).send({ success: false, message: "User not found" })
     }
 
-    return success(reply, { data: updatedUser, message: "Profil mis à jour" })
+    return reply
+      .code(200)
+      .send({ success: true, data: updatedUser, message: "Profil mis à jour" })
   } catch (err) {
-    console.error("Error updating user profile:", err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la mise à jour du profil")
-    )
+    request.log.error("Error updating user profile:", err)
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la mise à jour du profil",
+    })
   }
 }
 
@@ -77,23 +75,23 @@ export const hasPassword = async (request, reply) => {
 
     // Handle case where user is not found
     if (!foundAccount) {
-      return error(reply, HttpStatus.notFound("User not found"))
+      return reply.code(404).send({ success: false, message: "User not found" })
     }
 
     // Return the user's password (hashed, for security)
-    return success(reply, {
+    return reply.code(200).send({
+      success: true,
       data: {
         hasPassword: !!foundAccount.password,
         email: foundAccount.email,
       },
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la vérification du mot de passe")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la vérification du mot de passe",
+    })
   }
 }
 
@@ -106,7 +104,7 @@ export const updatePassword = async (request, reply) => {
 
     // Handle case where user is not found
     if (!foundAccount) {
-      return error(reply, HttpStatus.notFound("User not found"))
+      return reply.code(404).send({ success: false, message: "User not found" })
     }
 
     // Case when the user has authenticated with oauth2
@@ -117,8 +115,8 @@ export const updatePassword = async (request, reply) => {
           foundAccount.password
         )
       ) {
-        return error(reply, {
-          ...HttpStatus.badRequest(),
+        return reply.code(400).send({
+          success: false,
           validation: { currentPassword: "Current password is incorrect" },
         })
       }
@@ -128,7 +126,8 @@ export const updatePassword = async (request, reply) => {
           foundAccount.password
         )
       ) {
-        return error(reply, HttpStatus.badRequest(), {
+        return reply.code(400).send({
+          success: false,
           validation: {
             newPassword: "New password cannot be the same as the old one",
             currentPassword: "New password cannot be the same as the old one",
@@ -148,16 +147,16 @@ export const updatePassword = async (request, reply) => {
       .returning()
 
     // Return a success message
-    return success(reply, {
+    return reply.code(200).send({
+      success: true,
       message: "Password updated successfully",
       data: { user: updatedAccount },
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la mise à jour du mot de passe")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la mise à jour du mot de passe",
+    })
   }
 }

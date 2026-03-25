@@ -1,8 +1,6 @@
 import { eq } from "drizzle-orm"
-import { db } from "@/database/index.js"
-import { error, success } from "@/lib/responses.js"
-import { users } from "@db/schema"
-import { HttpStatus } from "@/lib/HttpStatus.js"
+import { db } from "../../database/index.js"
+import { users } from "../../database/schema.js"
 
 export const getUser = async (request, reply) => {
   try {
@@ -18,19 +16,18 @@ export const getUser = async (request, reply) => {
       .where(eq(users.id, request.user.id))
 
     if (!user) {
-      return error(reply, HttpStatus.notFound("User not found"))
+      return reply.code(404).send({ success: false, message: "User not found" })
     }
 
-    return success(reply, { data: { ...user, username: user.email } })
+    return reply
+      .code(200)
+      .send({ success: true, data: { ...user, username: user.email } })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError(
-        "Erreur lors de la récupération de l'utilisateur"
-      )
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération de l'utilisateur",
+    })
   }
 }
 
@@ -49,11 +46,9 @@ export const getAllUsers = async (request, reply) => {
     reply.status(200).send({ success: true, data: userList })
   } catch (err) {
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError(
-        "Erreur lors de la récupération de l'utilisateur"
-      )
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération de l'utilisateur",
+    })
   }
 }

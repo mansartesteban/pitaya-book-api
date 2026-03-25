@@ -1,11 +1,11 @@
-import accountRoutes from "./account/account.routes"
-import authRoutes from "./auth/auth.routes"
-import clientRoutes from "./clients/client.routes"
-import serviceRoutes from "./service/service.routes"
-import userRoutes from "./user/user.routes"
-import mainRoutes from "./main/main.routes"
-import galleryRoutes from "./gallery/gallery.routes"
-import publicRoutes from "./public/public.routes"
+import accountRoutes from "./account/account.routes.js"
+import authRoutes from "./auth/auth.routes.js"
+import clientRoutes from "./clients/client.routes.js"
+import serviceRoutes from "./service/service.routes.js"
+import userRoutes from "./user/user.routes.js"
+import mainRoutes from "./main/main.routes.js"
+import galleryRoutes from "./gallery/gallery.routes.js"
+import publicRoutes from "./public/public.routes.js"
 
 export default async (app) => {
   await app.register(authRoutes, { prefix: "/api/auth" })

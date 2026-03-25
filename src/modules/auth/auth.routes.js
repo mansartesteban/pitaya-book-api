@@ -6,15 +6,15 @@ import {
   forgotPassword,
   resetPassword,
   signOut,
-} from "./auth.actions"
+} from "./auth.actions.js"
 import {
   signInFormValidator,
   signUpFormValidator,
   forgotPasswordValidator,
   resetPasswordValidator,
-} from "./auth.validators"
-import { registerGoogleOAuth } from "./oauth/google"
-import { authenticationMiddleware } from "@/lib/middlewares/authentication"
+} from "./auth.validators.js"
+import { registerGoogleOAuth } from "./oauth/google.js"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 
 export default function authRoutes(fastify) {
   fastify.post(

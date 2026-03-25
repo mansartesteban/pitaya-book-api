@@ -1,5 +1,5 @@
-import { authenticationMiddleware } from "@/lib/middlewares/authentication"
-import { getAllUsers, getUser } from "./user.actions"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { getAllUsers, getUser } from "./user.actions.js"
 
 export default function userRoutes(fastify) {
   fastify.get(

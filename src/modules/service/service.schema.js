@@ -7,9 +7,9 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core"
-import { users } from "../user/user.schema"
-import { companies } from "../../database/schemas/company.schema"
-import { pitaya } from "@db"
+import { users } from "../user/user.schema.js"
+import { companies } from "../../database/schemas/company.schema.js"
+import { pitaya } from "../../database/index.js"
 
 export const ServiceStatusEnum = {
   LEAD: "LEAD", // Demande reçue

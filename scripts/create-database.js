@@ -12,7 +12,6 @@ async function createDB() {
   await client.connect()
   await client.query(`CREATE DATABASE pitaya;`)
   await client.end()
-  console.info("Database created!")
 }
 
 createDB().catch(console.error)

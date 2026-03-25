@@ -1,17 +1,17 @@
-import { authenticationMiddleware } from "@/lib/middlewares/authentication"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 import {
   createCompany,
   deleteCompany,
   getAllCompanies,
   getCompany,
   updateCompany,
-} from "./client.actions"
+} from "./client.actions.js"
 import {
   createCompanyValidator,
   deleteCompanyValidator,
   getCompanyValidator,
   updateCompanyValidator,
-} from "./client.validators"
+} from "./client.validators.js"
 
 export default function clientRoutes(fastify) {
   fastify.get(

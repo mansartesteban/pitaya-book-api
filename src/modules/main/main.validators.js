@@ -1,6 +1,9 @@
-import { createValidator, composeValidators } from "@lib/validators/composer"
-import { rules } from "@lib/validators/rules"
-import { emailRules, phoneRules } from "../../lib/validators/commons"
+import {
+  createValidator,
+  composeValidators,
+} from "../../lib/validators/composer.js"
+import { rules } from "../../lib/validators/rules.js"
+import { emailRules, phoneRules } from "../../lib/validators/commons.js"
 
 export const contactValidator = createValidator({
   firstname: [

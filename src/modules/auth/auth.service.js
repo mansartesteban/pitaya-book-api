@@ -1,5 +1,5 @@
-import { db } from "@db"
-import { users } from "@db/schema"
+import { db } from "../../database/index.js"
+import { users } from "../../database/schema.js"
 import { Resend } from "resend"
 
 const mailTemplates = (user, verificationUrl) => [
@@ -243,6 +243,4 @@ export async function sendResetMail(user, resetUrl) {
     subject: "Réinitilialisation de votre mot de passe Pitaya Inc",
     html: mailTemplates(user, resetUrl)[1],
   })
-
-  console.log("resend sended", res)
 }

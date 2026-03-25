@@ -7,8 +7,8 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core"
-import { galleries, users } from "../schema"
-import { pitaya } from "@db"
+import { galleries, users } from "../schema.js"
+import { pitaya } from "../index.js"
 
 export const photos = pitaya.table("photos", {
   id: uuid("id").defaultRandom().primaryKey(),

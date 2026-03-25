@@ -1,14 +1,14 @@
-import { authenticationMiddleware } from "@lib/middlewares/authentication"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 import {
   getProfile,
   updateProfile,
   hasPassword,
   updatePassword,
-} from "./account.actions"
+} from "./account.actions.js"
 import {
   updatePasswordValidator,
   updateProfileValidator,
-} from "./account.validators"
+} from "./account.validators.js"
 
 export default function accountRoutes(fastify) {
   fastify.get(

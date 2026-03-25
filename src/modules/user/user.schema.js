@@ -1,6 +1,6 @@
 import { boolean, timestamp, text, uuid } from "drizzle-orm/pg-core"
 
-import { pitaya } from "@db"
+import { pitaya } from "../../database/index.js"
 
 // Enums
 export const clientType = pitaya.enum("client_type", [

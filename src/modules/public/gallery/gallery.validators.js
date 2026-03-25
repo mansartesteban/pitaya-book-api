@@ -1,5 +1,5 @@
-import { createValidator } from "@lib/validators/composer"
-import { rules } from "@lib/validators/rules"
+import { createValidator } from "../../../lib/validators/composer.js"
+import { rules } from "../../../lib/validators/rules.js"
 
 export const getGalleryValidator = createValidator(
   {

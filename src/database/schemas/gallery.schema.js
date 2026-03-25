@@ -1,8 +1,8 @@
 import { integer, pgEnum, text, timestamp, uuid } from "drizzle-orm/pg-core"
-import { users } from "../schema"
-import { companies } from "./company.schema"
-import { services } from "../../modules/service/service.schema"
-import { pitaya } from "@db"
+import { users } from "../schema.js"
+import { companies } from "./company.schema.js"
+import { services } from "../../modules/service/service.schema.js"
+import { pitaya } from "../index.js"
 
 export const galleryVisibility = pitaya.enum("gallery_visibility", [
   "HIDDEN",

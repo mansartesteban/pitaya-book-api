@@ -1,13 +1,13 @@
-import { registerErrorHandler } from "./lib/middlewares/errorHandler"
 import dotenv from "dotenv"
 import Fastify from "fastify"
 import fastifyJwt from "@fastify/jwt"
 import cors from "@fastify/cors"
 import fastifyRequestLogger from "@mgcrea/fastify-request-logger"
-import routes from "@/modules/routes"
 import multipart from "@fastify/multipart"
 import util from "node:util"
 import fastifyCookie from "@fastify/cookie"
+import { registerErrorHandler } from "./lib/middlewares/errorHandler.js"
+import routes from "./modules/routes.js"
 
 dotenv.config()
 
@@ -107,8 +107,6 @@ routes(app).then(() => {
       app.log.error(err)
       process.exit(1)
     }
-
-    console.log("aoo", app.printRoutes())
 
     app.log.info(`Server listening at ${addr}`)
   })

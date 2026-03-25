@@ -1,17 +1,15 @@
-import { success, error } from "@lib/responses"
-import { db } from "@db"
-import { services } from "@db/schema"
-import { ServiceStatusEnum } from "./service.schema"
-import { HttpStatus } from "@lib/httpStatus"
-import { and, eq } from "drizzle-orm"
-import { createUpdateObject } from "../../lib/utils/Query"
-import { companies } from "../../database/schema"
-import { documents } from "../../database/schema"
 import path from "path"
 import fs from "fs"
 import { unlink } from "fs/promises"
 
-import { documentManager } from "../../lib/documentManager"
+import { and, eq } from "drizzle-orm"
+
+import { db } from "../../database/index.js"
+import { services, companies, documents } from "../../database/schema.js"
+import { ServiceStatusEnum } from "./service.schema.js"
+
+import { createUpdateObject } from "../../lib/utils/Query.js"
+import { documentManager } from "../../lib/documentManager.js"
 
 export const getOneService = async (request, reply) => {
   try {
@@ -32,16 +30,13 @@ export const getOneService = async (request, reply) => {
       .from(services)
       .leftJoin(companies, eq(services.clientCompanyId, companies.id))
       .where(eq(services.id, request.validated.params.id))
-    return success(reply, { data: serviceFound })
+    return reply.code(200).send({ success: true, data: serviceFound })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError(
-        "Erreur lors de la récupération de la prestation"
-      )
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération de la prestation",
+    })
   }
 }
 export const createService = async (request, reply) => {
@@ -57,17 +52,17 @@ export const createService = async (request, reply) => {
       })
       .returning()
 
-    return success(reply, {
+    return reply.code(201).send({
+      success: true,
       data: insertedService,
       message: "Prestation créée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la création de la prestation")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la création de la prestation",
+    })
   }
 }
 
@@ -84,14 +79,13 @@ export const getServices = async (request, reply) => {
         status: services.status,
       })
       .from(services)
-    return success(reply, { data: servicesList })
+    return reply.code(200).send({ success: true, data: servicesList })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la récupération des prestations")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la récupération des prestations",
+    })
   }
 }
 
@@ -112,17 +106,17 @@ export const updateService = async (request, reply) => {
       .where(eq(services.id, request.validated.params.id))
       .returning()
 
-    return success(reply, {
+    return reply.code(200).send({
+      success: true,
       data: updatedService,
       message: "Prestation modifiée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
-    return error(
-      reply,
-      HttpStatus.internalError("Erreur lors de la mise à jour de la prestation")
-    )
+    return reply.code(500).send({
+      success: false,
+      message: "Erreur lors de la mise à jour de la prestation",
+    })
   }
 }
 
@@ -152,7 +146,9 @@ export const uploadFileService = async (request, reply) => {
       folder: serviceId,
     })
 
-    return success(reply, { message: "Fichier téléchargé", data: document })
+    return reply
+      .code(200)
+      .send({ success: true, message: "Fichier téléchargé", data: document })
   } catch (err) {
     request.log.error(err)
 
@@ -177,8 +173,8 @@ export const listFileService = async (request, reply) => {
       data: files,
     })
   } catch (err) {
-    request.log?.error(err)
-    return error(reply, err.message, 500)
+    request.log.error(err)
+    return reply.code(500).send({ success: false, message: err.message })
   }
 }
 
@@ -219,7 +215,7 @@ export const getFile = async (request, reply) => {
     return reply.send(fs.createReadStream(file.path))
   } catch (err) {
     request.log?.error(err)
-    return error(reply, err.message, 500)
+    return reply.code(500).send({ success: false, message: err.message })
   }
 }
 
@@ -236,7 +232,9 @@ export const deleteFile = async (request, reply) => {
       .where(and(eq(documents.id, fileId), eq(documents.serviceId, serviceId)))
 
     if (!file) {
-      return error(reply, "Fichier introuvable", 404)
+      return reply
+        .code(404)
+        .send({ success: false, message: "Fichier introuvable" })
     }
 
     // Supprimer le fichier du disque
@@ -249,6 +247,6 @@ export const deleteFile = async (request, reply) => {
       .send({ success: true, message: "Fichier supprimé" })
   } catch (err) {
     request.log?.error(err)
-    return error(reply, err.message, 500)
+    return reply.code(500).send({ success: false, message: err.message })
   }
 }

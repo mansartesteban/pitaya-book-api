@@ -1,6 +1,6 @@
-import { pitaya } from "@db"
+import { pitaya } from "../index.js"
 import { uuid, varchar, timestamp, boolean } from "drizzle-orm/pg-core"
-import { users } from "@db/schema"
+import { users } from "../schema.js"
 
 export const emailTokens = pitaya.table("email_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),

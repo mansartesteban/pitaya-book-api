@@ -7,8 +7,8 @@ import {
   listFileService,
   updateService,
   uploadFileService,
-} from "./service.actions"
-import { authenticationMiddleware } from "@/lib/middlewares/authentication"
+} from "./service.actions.js"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 import {
   createServiceValidator,
   deleteFileValidator,
@@ -17,7 +17,7 @@ import {
   listFileServiceValidator,
   updateServiceSchema,
   uploadFileServiceValidator,
-} from "./service.validators"
+} from "./service.validators.js"
 
 export default function serviceRoutes(fastify) {
   fastify.get(

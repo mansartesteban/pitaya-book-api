@@ -1,6 +1,6 @@
 import { integer, text, timestamp, uuid } from "drizzle-orm/pg-core"
-import { services } from "../../modules/service/service.schema"
-import { pitaya } from "@db"
+import { services } from "../../modules/service/service.schema.js"
+import { pitaya } from "../index.js"
 
 export const documentCategoryEnum = pitaya.enum("document_category", [
   "SERVICE",

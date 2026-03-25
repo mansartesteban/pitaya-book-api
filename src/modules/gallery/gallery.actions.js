@@ -1,13 +1,13 @@
 import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
-import { db } from "@db"
-import { galleries, photos } from "../../database/schema"
+import { db } from "../../database/index.js"
+import { galleries, photos } from "../../database/schema.js"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import slugify from "slugify"
 import crypto from "node:crypto"
 import archiver from "archiver"
 import sharp from "sharp"
 import { pipeline } from "node:stream/promises"
-import { signPhotoUrl } from "../../lib/utils/Photo"
+import { signPhotoUrl } from "../../lib/utils/Photo.js"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -119,7 +119,6 @@ export const getAllGalleries = async (request, reply) => {
 
     return reply.code(200).send({ success: true, data: foundGalleries })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -140,14 +139,18 @@ export const getOneGallery = async (request, reply) => {
         visibility: galleries.visibility,
         serviceId: galleries.serviceId,
         parentGallery: galleries.parentGallery,
+        photoCount: sql`count(${photos.id})`.as("photoCount"),
+        totalSize: sql`coalesce(sum(${photos.size}), 0)`.as("totalSize"),
       })
       .from(galleries)
+      .leftJoin(photos, eq(photos.galleryId, galleries.id))
       .where(
         and(
           eq(galleries.id, galleryId),
           eq(galleries.ownerUserId, request.user.id)
         )
       )
+      .groupBy(galleries.id)
     if (!foundGallery) {
       return reply
         .code(404)
@@ -269,7 +272,6 @@ export const getOneGallery = async (request, reply) => {
 
     return reply.code(200).send({ success: true, data: foundGallery })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -340,7 +342,6 @@ export const updateGallery = async (request, reply) => {
       message: "Galerie modifiée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -365,7 +366,6 @@ export const addParentGallery = async (request, reply) => {
       message: "Galerie principale ajoutée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -389,7 +389,6 @@ export const removeParentGallery = async (request, reply) => {
       message: "Galerie principale retirée",
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -412,7 +411,6 @@ export const deleteGallery = async (request, reply) => {
 
     return reply.code(200).send({ success: true, message: "Galerie supprimée" })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -524,7 +522,6 @@ export const uploadPhoto = async (request, reply) => {
 
     return reply.code(200).send({ success: true, data: insertedPhoto })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -579,7 +576,6 @@ export const deletePhoto = async (request, reply) => {
       })
     }
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -641,7 +637,6 @@ export const deleteMultiplePhotos = async (request, reply) => {
       data: deletedPhotos,
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -652,7 +647,6 @@ export const deleteMultiplePhotos = async (request, reply) => {
 export const updatePhoto = async (request, reply) => {
   try {
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -687,7 +681,6 @@ export const downloadPhoto = async (request, reply) => {
 
     return reply.send(stream)
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -820,7 +813,6 @@ export const downloadMultiplePhotos = async (request, reply) => {
 
     // archive.finalize()
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,

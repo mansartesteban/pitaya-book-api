@@ -1,6 +1,10 @@
-import { createValidator } from "@lib/validators/composer"
-import { emailRules, passwordRules, jwtRules } from "@lib/validators/commons"
-import { rules } from "@lib/validators/rules"
+import { createValidator } from "../../lib/validators/composer.js"
+import {
+  emailRules,
+  passwordRules,
+  jwtRules,
+} from "../../lib/validators/commons.js"
+import { rules } from "../../lib/validators/rules.js"
 
 export const signInFormValidator = createValidator({
   email: emailRules,

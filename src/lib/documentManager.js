@@ -3,8 +3,8 @@ import { createWriteStream } from "fs"
 import path from "path"
 import { pipeline } from "stream/promises"
 import crypto from "crypto"
-import { db } from "@db"
-import { documents } from "@db/schemas/document.schema.js"
+import { db } from "../database/index.js"
+import { documents } from "../database/schemas/document.schema.js"
 import { eq } from "drizzle-orm"
 
 export class DocumentManager {

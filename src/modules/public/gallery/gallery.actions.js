@@ -1,7 +1,7 @@
-import { db } from "@db"
-import { galleries, photos } from "../../../database/schema"
+import { db } from "../../../database/index.js"
+import { galleries, photos } from "../../../database/schema.js"
 import { and, eq, inArray, sql } from "drizzle-orm"
-import { signPhotoUrl } from "../../../lib/utils/Photo"
+import { signPhotoUrl } from "../../../lib/utils/Photo.js"
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -68,7 +68,6 @@ export const getAllGalleries = async (request, reply) => {
       data: roots,
     })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,
@@ -158,7 +157,6 @@ export const getGallery = async (request, reply) => {
 
     return reply.code(200).send({ success: true, data: foundGallery })
   } catch (err) {
-    console.error("err", err)
     request.log.error(err)
     return reply.code(500).send({
       success: false,

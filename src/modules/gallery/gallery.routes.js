@@ -12,7 +12,7 @@ import {
   downloadMultiplePhotos,
   addParentGallery,
   removeParentGallery,
-} from "./gallery.actions"
+} from "./gallery.actions.js"
 import {
   addParentGalleryValidator,
   createGalleryValidator,
@@ -26,8 +26,8 @@ import {
   updateGalleryValidator,
   updatePhotoValidator,
   uploadPhotoValidator,
-} from "./gallery.validators"
-import { authenticationMiddleware } from "@/lib/middlewares/authentication"
+} from "./gallery.validators.js"
+import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 
 export default function galleryRoutes(fastify) {
   fastify.get(
