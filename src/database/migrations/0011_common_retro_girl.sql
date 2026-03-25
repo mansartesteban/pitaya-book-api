@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."photos" ADD COLUMN "size" integer NOT NULL;

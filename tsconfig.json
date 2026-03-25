@@ -8,7 +8,15 @@
     "types": ["node"],
     "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@db/*": ["./src/database/*"],
+      "@db": ["./src/database/index.js"],
+      "@modules/*": ["./src/modules/*"],
+      "@lib/*": ["./src/lib/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["."]
 }

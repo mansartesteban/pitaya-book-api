@@ -7,38 +7,47 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm i && tsx watch src/server.ts",
+    "dev": "pnpm i && node --import ./loader.js --watch src/server.js",
+    "dev2": "pnpm i && nodemon --watch src --ext js --exec node src/server.js",
     "build": "tsc",
     "start": "node build/server.js",
-    "lint": "eslint . --ext .ts",
-    "prisma:studio": "npx prisma studio",
-    "prisma:migrate": "npx prisma migrate dev",
-    "prisma:deploy": "npx prisma migrate deploy",
-    "prisma:pull": "npx prisma db pull",
-    "prisma:generate": "npx prisma generate",
-    "prisma:reset": "npx prisma migrate reset --force"
+    "lint": "eslint . --ext .ts"
   },
   "dependencies": {
+    "@bunny.net/storage-sdk": "^0.3.1",
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.0.1",
     "@fastify/jwt": "^9.1.0",
+    "@fastify/multipart": "^9.4.0",
     "@fastify/oauth2": "^8.1.2",
-    "@prisma/client": "^6.9.0",
+    "@mgcrea/fastify-request-logger": "^1.9.1",
+    "@mgcrea/pino-pretty-compact": "^1.4.2",
+    "archiver": "^7.0.1",
     "bcrypt": "^6.0.0",
     "dotenv": "^16.0.0",
+    "drizzle-orm": "^0.45.1",
     "fastify": "^5.3.3",
     "fastify-plugin": "^5.0.1",
+    "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
+    "nodemailer": "^8.0.3",
+    "pg": "^8.18.0",
+    "pino-pretty": "^13.1.3",
+    "postgres": "^3.4.8",
     "resend": "^4.5.2",
-    "zod": "^3.22.0"
+    "sharp": "^0.34.5",
+    "slugify": "^1.6.8"
   },
   "devDependencies": {
+    "@esbuild-kit/esm-loader": "^2.6.5",
     "@types/bcrypt": "^5.0.2",
     "@types/node": "^22.15.29",
+    "drizzle-kit": "^0.31.8",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.29.0",
-    "prisma": "^6.9.0",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
-  }
+    "nodemon": "^3.1.11",
+    "pino": "^10.3.0"
+  },
+  "packageManager": "pnpm@9.0.0+sha512.b4106707c7225b1748b61595953ccbebff97b54ad05d002aa3635f633b9c53cd666f7ce9b8bc44704f1fa048b9a49b55371ab2d9e9d667d1efe2ef1514bcd513"
 }
