@@ -102,12 +102,15 @@ await app.register(cors, {
 
 registerErrorHandler(app)
 routes(app).then(() => {
-  app.listen({ port: Number(process.env.PORT) || 3000 }, (err, addr) => {
-    if (err) {
-      app.log.error(err)
-      process.exit(1)
-    }
+  app.listen(
+    { host: "0.0.0.0", port: Number(process.env.PORT) || 3000 },
+    (err, addr) => {
+      if (err) {
+        app.log.error(err)
+        process.exit(1)
+      }
 
-    app.log.info(`Server listening at ${addr}`)
-  })
+      app.log.info(`Server listening at ${addr}`)
+    }
+  )
 })
