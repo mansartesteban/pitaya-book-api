@@ -11,7 +11,8 @@
     "dev2": "pnpm i && nodemon --watch src --ext js --exec node src/server.js",
     "build": "tsc",
     "start": "node --import ./loader.js src/server.js",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "migrate": "pnpm drizzle-kit migrate"
   },
   "dependencies": {
     "@bunny.net/storage-sdk": "^0.3.1",
