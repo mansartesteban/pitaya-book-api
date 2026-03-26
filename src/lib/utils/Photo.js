@@ -27,7 +27,7 @@ export const signPhotoUrl = (photo, signed = true, thumbnail = null) => {
 
   if (signed) {
     let securityKey = process.env.BUNNY_AUTH_URL_TOKEN
-    let expires = Math.round(Date.now() / 1000) + 60
+    let expires = Math.round(Date.now() / 1000) + 60 * 5
 
     var hashableBase = securityKey + photoUrl + expires
     let md5String = crypto

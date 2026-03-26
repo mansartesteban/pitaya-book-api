@@ -69,13 +69,6 @@ const app = Fastify({
   loggerInstance: createLogger("app", {
     level: LOG_ERROR | LOG_FATAL | LOG_WARN | LOG_INFO | LOG_DEBUG,
   }),
-  // logger: {
-  //   level: "debug",
-  //   transport: {
-  //     target: "@mgcrea/pino-pretty-compact",
-  //     options: { translateTime: "HH:MM:ss Z", ignore: "pid,hostname" },
-  //   },
-  // },
   disableRequestLogging: true,
 })
 
@@ -105,6 +98,12 @@ await app.register(cors, {
 })
 
 registerErrorHandler(app)
+
+// for tests
+// app.addHook("onRequest", async (request, reply) => {
+//   await new Promise((r) => setTimeout(r, 50000))
+// })
+
 routes(app).then(() => {
   app.listen(
     { host: "0.0.0.0", port: Number(process.env.PORT) || 3000 },
