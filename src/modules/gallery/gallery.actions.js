@@ -422,6 +422,13 @@ export const deleteGallery = async (request, reply) => {
 export const uploadPhoto = async (request, reply) => {
   try {
     const part = await request.file()
+    part.file.on("limit", () => {
+      return reply.code(413).send({
+        success: false,
+        message: "Fichier trop volumineux (Maximum 10MB)",
+      })
+    })
+
     const chunks = []
     for await (const chunk of part.file) {
       chunks.push(chunk)
@@ -522,6 +529,12 @@ export const uploadPhoto = async (request, reply) => {
 
     return reply.code(200).send({ success: true, data: insertedPhoto })
   } catch (err) {
+    if (err.code === "FST_REQ_FILE_TOO_LARGE") {
+      return reply.code(413).send({
+        success: false,
+        message: "Fichier trop volumineux (Maximum 10MB)",
+      })
+    }
     request.log.error(err)
     return reply.code(500).send({
       success: false,

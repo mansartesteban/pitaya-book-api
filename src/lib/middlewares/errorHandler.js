@@ -20,6 +20,13 @@ export function registerErrorHandler(fastify) {
       })
     }
 
+    if (error.code === "FST_REQ_FILE_TOO_LARGE") {
+      return reply.code(413).send({
+        success: false,
+        message: "Fichier trop volumineux",
+      })
+    }
+
     // Erreur générique
     return reply.status(error.statusCode || 500).send({
       success: false,
