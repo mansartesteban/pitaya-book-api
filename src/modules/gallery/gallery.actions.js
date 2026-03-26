@@ -71,13 +71,13 @@ export const getAllGalleries = async (request, reply) => {
       const descendants = await db.execute(sql`
           WITH RECURSIVE descendants AS (
             SELECT id, parent_gallery_id
-            FROM galleries
+            FROM pitaya.galleries
             WHERE id = ${gallery.id}
         
             UNION ALL
         
             SELECT g.id, g.parent_gallery_id
-            FROM galleries g
+            FROM pitaya.galleries g
             INNER JOIN descendants d ON g.parent_gallery_id = d.id
           )
           SELECT id FROM descendants;
@@ -87,13 +87,13 @@ export const getAllGalleries = async (request, reply) => {
       const ancestors = await db.execute(sql`
           WITH RECURSIVE ancestors AS (
             SELECT id, parent_gallery_id
-            FROM galleries
+            FROM pitaya.galleries
             WHERE id = ${gallery.id}
     
             UNION ALL
     
             SELECT g.id, g.parent_gallery_id
-            FROM galleries g
+            FROM pitaya.galleries g
             INNER JOIN ancestors a ON g.id = a.parent_gallery_id
           )
           SELECT id FROM ancestors;
@@ -211,13 +211,13 @@ export const getOneGallery = async (request, reply) => {
     const descendants = await db.execute(sql`
       WITH RECURSIVE descendants AS (
         SELECT id, parent_gallery_id
-        FROM galleries
+        FROM pitaya.galleries
         WHERE id = ${galleryId}
     
         UNION ALL
     
         SELECT g.id, g.parent_gallery_id
-        FROM galleries g
+        FROM pitaya.galleries g
         INNER JOIN descendants d ON g.parent_gallery_id = d.id
       )
       SELECT id FROM descendants;
@@ -227,13 +227,13 @@ export const getOneGallery = async (request, reply) => {
     const ancestors = await db.execute(sql`
       WITH RECURSIVE ancestors AS (
         SELECT id, parent_gallery_id
-        FROM galleries
+        FROM pitaya.galleries
         WHERE id = ${galleryId}
 
         UNION ALL
 
         SELECT g.id, g.parent_gallery_id
-        FROM galleries g
+        FROM pitaya.galleries g
         INNER JOIN ancestors a ON g.id = a.parent_gallery_id
       )
       SELECT id FROM ancestors;
