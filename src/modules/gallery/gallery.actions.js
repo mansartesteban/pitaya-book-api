@@ -457,7 +457,7 @@ export const uploadPhoto = async (request, reply) => {
     let photoId = crypto.randomUUID()
 
     let splittedFilename = part.filename.split(".")
-    let extension = splittedFilename.splice(-1)
+    let extension = splittedFilename.pop()
     let filename = splittedFilename.join(".")
     let uploadName = [photoId, extension].join(".")
 
