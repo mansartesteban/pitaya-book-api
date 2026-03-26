@@ -43,11 +43,12 @@ export const getAllGalleries = async (request, reply) => {
 
     const map = new Map()
 
-    // const filteredGalleries = foundGalleries.filter((g) => {
-    //   return g.photos.length > 2
-    // })
+    const filteredGalleries = foundGalleries.filter((g) => {
+      return g.photos.length > 2
+    })
+
     // indexation
-    for (const g of foundGalleries) {
+    for (const g of filteredGalleries) {
       map.set(g.id, { ...g, children: [] })
     }
 
