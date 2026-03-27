@@ -112,6 +112,7 @@ export const getGallery = async (request, reply) => {
       .where(eq(galleries.parentGallery, foundGallery.id))
 
     if (childrenGalleries.length > 0) {
+      console.log("children", foundGallery, childrenGalleries)
       for (let childrenGallery of childrenGalleries) {
         const foundPhotos = await db
           .select({
@@ -133,10 +134,45 @@ export const getGallery = async (request, reply) => {
           }
           return photo
         })
+
+        if (childrenGallery.photos.length === 0) {
+          const subsubGalleries = await db
+            .select({ id: galleries.id })
+            .from(galleries)
+            .where(eq(galleries.parentGallery, childrenGallery.id))
+          if (subsubGalleries) {
+            const foundSubPhotos = await db
+              .select({
+                id: photos.id,
+                width: photos.width,
+                height: photos.height,
+                ratio: photos.ratio,
+                galleryId: photos.galleryId,
+                extension: photos.extension,
+              })
+              .from(photos)
+              .where(
+                inArray(
+                  photos.galleryId,
+                  subsubGalleries.map((s) => s.id)
+                )
+              )
+              .limit(3)
+            childrenGallery.photos = foundSubPhotos.map((photo) => {
+              photo.urls = {
+                300: signPhotoUrl(photo, true, 300),
+                600: signPhotoUrl(photo, true, 600),
+                original: signPhotoUrl(photo, true),
+              }
+              return photo
+            })
+          }
+        }
       }
-      foundGallery.children = childrenGalleries.filter(
-        (child) => child.photos.length >= 3
-      )
+      foundGallery.children = childrenGalleries
+      // .filter(
+      //   (child) => child.photos.length >= 3
+      // )
     } else {
       const foundPhotos = await db
         .select({

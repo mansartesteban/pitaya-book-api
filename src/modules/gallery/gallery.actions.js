@@ -22,9 +22,18 @@ const visibilities = {
   2: "PUBLIC",
 }
 
+const sortFlatHierarchical = (galleries) => {
+  return [...galleries].sort((a, b) => {
+    const pathA = a.upRelations.join("/")
+    const pathB = b.upRelations.join("/")
+
+    return pathA.localeCompare(pathB)
+  })
+}
+
 export const getAllGalleries = async (request, reply) => {
   try {
-    const foundGalleries = await db
+    let foundGalleries = await db
       .select({
         id: galleries.id,
         name: galleries.name,
@@ -98,7 +107,7 @@ export const getAllGalleries = async (request, reply) => {
           )
           SELECT id FROM ancestors;
         `)
-      gallery.upRelations = ancestors.map((d) => d.id)
+      gallery.upRelations = ancestors.map((d) => d.id).reverse()
 
       const childrenGalleries = await db
         .select({
@@ -116,6 +125,8 @@ export const getAllGalleries = async (request, reply) => {
 
       gallery.children = childrenGalleries
     }
+
+    foundGalleries = sortFlatHierarchical(foundGalleries)
 
     return reply.code(200).send({ success: true, data: foundGalleries })
   } catch (err) {
