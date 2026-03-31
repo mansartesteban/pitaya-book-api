@@ -89,16 +89,21 @@ export const getGallery = async (request, reply) => {
         name: galleries.name,
         title: galleries.title,
         description: galleries.description,
+        visibility: galleries.visibility,
       })
       .from(galleries)
-      .where(
-        and(eq(galleries.id, galleryId), eq(galleries.visibility, "PUBLIC"))
-      )
+      .where(and(eq(galleries.id, galleryId)))
 
     if (!foundGallery) {
       return reply
         .code(404)
         .send({ success: false, message: "Aucune galerie trouvée" })
+    } else {
+      if (!["PUBLIC", "UNLISTED"].includes(foundGallery.visibility)) {
+        return reply
+          .code(403)
+          .send({ success: false, message: "Cette galerie est privée" })
+      }
     }
 
     const childrenGalleries = await db
