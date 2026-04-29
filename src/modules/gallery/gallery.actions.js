@@ -6,6 +6,7 @@ import slugify from "slugify"
 import crypto from "node:crypto"
 import archiver from "archiver"
 import sharp from "sharp"
+import bcrypt from "bcrypt"
 import { pipeline } from "node:stream/promises"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
 
@@ -147,6 +148,7 @@ export const getOneGallery = async (request, reply) => {
         name: galleries.name,
         title: galleries.title,
         description: galleries.description,
+        password: galleries.password,
         visibility: galleries.visibility,
         serviceId: galleries.serviceId,
         parentGallery: galleries.parentGallery,
@@ -323,19 +325,21 @@ export const createGallery = async (request, reply) => {
 }
 export const updateGallery = async (request, reply) => {
   try {
-    const { title, visibility, description, parentGalleryId } =
+    const { title, visibility, description, password, parentGalleryId } =
       request.validated.body
 
     const name = slugify(title, {
       strict: true,
       lower: true,
     })
+
     const [updatedGallery] = await db
       .update(galleries)
       .set({
         name: name,
         title: title,
         visibility: visibilities[visibility],
+        password: password,
         description: description,
         parentGallery: parentGalleryId,
       })
@@ -344,6 +348,7 @@ export const updateGallery = async (request, reply) => {
         name: galleries.name,
         title: galleries.title,
         visibility: galleries.visibility,
+        password: galleries.password,
         description: galleries.description,
       })
 

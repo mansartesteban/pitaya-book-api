@@ -3,6 +3,7 @@ import {
   composeValidators,
 } from "../../lib/validators/composer.js"
 import { rules } from "../../lib/validators/rules.js"
+import { passwordRules } from "../../lib/validators/commons.js"
 
 export const getOneGalleryValidator = createValidator(
   {
@@ -32,6 +33,7 @@ export const updateGalleryValidator = composeValidators(
     visibility: [rules.required, rules.isNumber],
     description: [rules.isString],
     parentGalleryId: [rules.isUUID],
+    password: passwordRules,
   }),
   createValidator(
     {

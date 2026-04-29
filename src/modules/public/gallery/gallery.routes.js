@@ -1,5 +1,12 @@
-import { getAllGalleries, getGallery } from "./gallery.actions.js"
-import { getGalleryValidator } from "./gallery.validators.js"
+import {
+  getAllGalleries,
+  getGallery,
+  getPrivateGallery,
+} from "./gallery.actions.js"
+import {
+  getGalleryValidator,
+  getPrivateGalleryValidator,
+} from "./gallery.validators.js"
 
 export default function galleryRoutes(fastify) {
   fastify.get(
@@ -15,5 +22,12 @@ export default function galleryRoutes(fastify) {
       preHandler: [getGalleryValidator],
     },
     getGallery
+  )
+  fastify.post(
+    "/:galleryId",
+    {
+      preHandler: [getPrivateGalleryValidator],
+    },
+    getPrivateGallery
   )
 }

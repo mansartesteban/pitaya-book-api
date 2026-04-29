@@ -2,6 +2,7 @@ import { db } from "../../../database/index.js"
 import { galleries, photos } from "../../../database/schema.js"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
+import bcrypt from "bcrypt"
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -83,6 +84,7 @@ export const getAllGalleries = async (request, reply) => {
 export const getGallery = async (request, reply) => {
   try {
     const { galleryId } = request.validated.params
+
     const [foundGallery] = await db
       .select({
         id: galleries.id,
@@ -94,91 +96,95 @@ export const getGallery = async (request, reply) => {
       .from(galleries)
       .where(and(eq(galleries.id, galleryId)))
 
-    if (!foundGallery) {
-      return reply
-        .code(404)
-        .send({ success: false, message: "Aucune galerie trouvée" })
-    } else {
-      if (!["PUBLIC", "UNLISTED"].includes(foundGallery.visibility)) {
-        return reply
-          .code(403)
-          .send({ success: false, message: "Cette galerie est privée" })
+    if (foundGallery.visibility === "PRIVATE") {
+      const cookie = request.cookies[`gallery_${foundGallery.id}`]
+
+      if (cookie !== "1") {
+        reply.code(200).send({ success: true, data: foundGallery })
+      } else {
+        return getPublicGallery(foundGallery, request, reply)
       }
     }
 
-    const childrenGalleries = await db
+    return getPublicGallery(foundGallery, request, reply)
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Une erreur est survenue lors de la récupération des galeries",
+    })
+  }
+}
+
+export const getPrivateGallery = async (request, reply) => {
+  try {
+    const { galleryId } = request.validated.params
+    const { password } = request.validated.body
+
+    const [foundGallery] = await db
       .select({
         id: galleries.id,
         name: galleries.name,
         title: galleries.title,
         description: galleries.description,
+        password: galleries.password,
+        visibility: galleries.visibility,
       })
       .from(galleries)
-      .where(eq(galleries.parentGallery, foundGallery.id))
+      .where(and(eq(galleries.id, galleryId)))
 
-    if (childrenGalleries.length > 0) {
-      console.log("children", foundGallery, childrenGalleries)
-      for (let childrenGallery of childrenGalleries) {
-        const foundPhotos = await db
-          .select({
-            id: photos.id,
-            width: photos.width,
-            height: photos.height,
-            ratio: photos.ratio,
-            galleryId: photos.galleryId,
-            extension: photos.extension,
-          })
-          .from(photos)
-          .where(eq(photos.galleryId, childrenGallery.id))
-
-        childrenGallery.photos = foundPhotos.map((photo) => {
-          photo.urls = {
-            300: signPhotoUrl(photo, true, 300),
-            600: signPhotoUrl(photo, true, 600),
-            original: signPhotoUrl(photo, true),
-          }
-          return photo
+    if (foundGallery.visibility === "PRIVATE") {
+      if (!foundGallery.password) {
+        return reply.code(401).send({
+          success: false,
+          message: "Cette galerie ne peut pas être vue",
         })
-
-        if (childrenGallery.photos.length === 0) {
-          const subsubGalleries = await db
-            .select({ id: galleries.id })
-            .from(galleries)
-            .where(eq(galleries.parentGallery, childrenGallery.id))
-          if (subsubGalleries) {
-            const foundSubPhotos = await db
-              .select({
-                id: photos.id,
-                width: photos.width,
-                height: photos.height,
-                ratio: photos.ratio,
-                galleryId: photos.galleryId,
-                extension: photos.extension,
-              })
-              .from(photos)
-              .where(
-                inArray(
-                  photos.galleryId,
-                  subsubGalleries.map((s) => s.id)
-                )
-              )
-              .limit(3)
-            childrenGallery.photos = foundSubPhotos.map((photo) => {
-              photo.urls = {
-                300: signPhotoUrl(photo, true, 300),
-                600: signPhotoUrl(photo, true, 600),
-                original: signPhotoUrl(photo, true),
-              }
-              return photo
-            })
-          }
+      } else {
+        if (foundGallery.password !== password) {
+          return reply
+            .code(401)
+            .send({ success: false, message: "Mot de passe incorrect" })
+        } else {
+          reply.setCookie(`gallery_${foundGallery.id}`, "1", {
+            path: "/",
+            maxAge: 60 * 60 * 24,
+            httpOnly: true,
+            sameSite: "lax",
+          })
+          return getPublicGallery(foundGallery, request, reply)
         }
       }
-      foundGallery.children = childrenGalleries
-      // .filter(
-      //   (child) => child.photos.length >= 3
-      // )
     } else {
+      return getPublicGallery(foundGallery, request, reply)
+    }
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Une erreur est survenue lors de la récupération des galeries",
+    })
+  }
+}
+
+const getPublicGallery = async (gallery, request, reply) => {
+  if (!gallery) {
+    return reply
+      .code(404)
+      .send({ success: false, message: "Aucune galerie trouvée" })
+  }
+
+  const childrenGalleries = await db
+    .select({
+      id: galleries.id,
+      name: galleries.name,
+      title: galleries.title,
+      description: galleries.description,
+    })
+    .from(galleries)
+    .where(eq(galleries.parentGallery, gallery.id))
+
+  if (childrenGalleries.length > 0) {
+    for (let childrenGallery of childrenGalleries) {
       const foundPhotos = await db
         .select({
           id: photos.id,
@@ -189,8 +195,9 @@ export const getGallery = async (request, reply) => {
           extension: photos.extension,
         })
         .from(photos)
-        .where(eq(photos.galleryId, foundGallery.id))
-      foundGallery.photos = foundPhotos.map((photo) => {
+        .where(eq(photos.galleryId, childrenGallery.id))
+
+      childrenGallery.photos = foundPhotos.map((photo) => {
         photo.urls = {
           300: signPhotoUrl(photo, true, 300),
           600: signPhotoUrl(photo, true, 600),
@@ -198,14 +205,67 @@ export const getGallery = async (request, reply) => {
         }
         return photo
       })
-    }
 
-    return reply.code(200).send({ success: true, data: foundGallery })
-  } catch (err) {
-    request.log.error(err)
-    return reply.code(500).send({
-      success: false,
-      message: "Une erreur est survenue lors de la récupération des galeries",
+      if (childrenGallery.photos.length === 0) {
+        const subsubGalleries = await db
+          .select({ id: galleries.id })
+          .from(galleries)
+          .where(eq(galleries.parentGallery, childrenGallery.id))
+        if (subsubGalleries) {
+          const foundSubPhotos = await db
+            .select({
+              id: photos.id,
+              width: photos.width,
+              height: photos.height,
+              ratio: photos.ratio,
+              galleryId: photos.galleryId,
+              extension: photos.extension,
+            })
+            .from(photos)
+            .where(
+              inArray(
+                photos.galleryId,
+                subsubGalleries.map((s) => s.id)
+              )
+            )
+            .limit(3)
+          childrenGallery.photos = foundSubPhotos.map((photo) => {
+            photo.urls = {
+              300: signPhotoUrl(photo, true, 300),
+              600: signPhotoUrl(photo, true, 600),
+              original: signPhotoUrl(photo, true),
+            }
+            return photo
+          })
+        }
+      }
+    }
+    gallery.children = childrenGalleries
+    // .filter(
+    //   (child) => child.photos.length >= 3
+    // )
+  } else {
+    const foundPhotos = await db
+      .select({
+        id: photos.id,
+        width: photos.width,
+        height: photos.height,
+        ratio: photos.ratio,
+        galleryId: photos.galleryId,
+        extension: photos.extension,
+      })
+      .from(photos)
+      .where(eq(photos.galleryId, gallery.id))
+
+    gallery.photos = foundPhotos.map((photo) => {
+      photo.urls = {
+        300: signPhotoUrl(photo, true, 300),
+        600: signPhotoUrl(photo, true, 600),
+        original: signPhotoUrl(photo, true),
+      }
+      return photo
     })
   }
+
+  return reply.code(200).send({ success: true, data: gallery })
 }

@@ -18,6 +18,8 @@ export const galleries = pitaya.table("galleries", {
   description: text("description"),
   visibility: galleryVisibility("visibility").notNull(),
 
+  password: text("password"),
+
   parentGallery: uuid("parent_gallery_id").references(() => galleries.id, {
     onDelete: "set null",
   }),
