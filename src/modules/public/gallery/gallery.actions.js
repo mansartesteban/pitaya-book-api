@@ -1,6 +1,6 @@
 import { db } from "../../../database/index.js"
 import { galleries, photos } from "../../../database/schema.js"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
 import bcrypt from "bcrypt"
 
@@ -91,6 +91,7 @@ export const getGallery = async (request, reply) => {
         name: galleries.name,
         title: galleries.title,
         description: galleries.description,
+        parentGallery: galleries.parentGallery,
         visibility: galleries.visibility,
       })
       .from(galleries)
@@ -129,6 +130,7 @@ export const getPrivateGallery = async (request, reply) => {
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
+        parentGallery: galleries.parentGallery,
       })
       .from(galleries)
       .where(and(eq(galleries.id, galleryId)))
@@ -255,7 +257,9 @@ const getPublicGallery = async (gallery, request, reply) => {
         extension: photos.extension,
       })
       .from(photos)
-      .where(eq(photos.galleryId, gallery.id))
+      .where(
+        and(eq(photos.galleryId, gallery.id), eq(photos.isCoverPhoto, false))
+      )
 
     gallery.photos = foundPhotos.map((photo) => {
       photo.urls = {
@@ -265,6 +269,56 @@ const getPublicGallery = async (gallery, request, reply) => {
       }
       return photo
     })
+  }
+
+  let current = gallery
+
+  while (current.parentGallery) {
+    console.log("in hilw", current.parentGallery)
+    const [parent] = await db
+      .select({
+        id: galleries.id,
+        parentGallery: galleries.parentGallery,
+        description: galleries.description,
+        title: galleries.title,
+      })
+      .from(galleries)
+      .where(eq(galleries.id, current.parentGallery))
+      .limit(1)
+
+    if (!parent) break
+
+    current = parent
+  }
+  let rootGallery = current
+
+  const [coverPhoto] = await db
+    .select({
+      id: photos.id,
+      width: photos.width,
+      height: photos.height,
+      ratio: photos.ratio,
+      galleryId: photos.galleryId,
+      extension: photos.extension,
+    })
+    .from(photos)
+    .where(
+      and(eq(photos.galleryId, rootGallery.id), eq(photos.isCoverPhoto, true))
+    )
+    .limit(1)
+
+  gallery.coverPhoto = {
+    ...coverPhoto,
+    urls: {
+      300: signPhotoUrl(coverPhoto, true, 300),
+      600: signPhotoUrl(coverPhoto, true, 600),
+      original: signPhotoUrl(coverPhoto, true),
+    },
+  }
+
+  if (gallery.id !== rootGallery.id) {
+    gallery.subtitle = gallery.title
+    gallery.title = rootGallery.title
   }
 
   return reply.code(200).send({ success: true, data: gallery })

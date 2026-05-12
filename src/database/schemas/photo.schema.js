@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   numeric,
   real,
@@ -15,6 +16,7 @@ export const photos = pitaya.table("photos", {
   galleryId: uuid("gallery_id")
     .references(() => galleries.id, { onDelete: "cascade" })
     .notNull(),
+  isCoverPhoto: boolean("is_cover_photo").default(false).notNull(),
   name: text("name"),
   filename: text("filename"),
   extension: text("extension").notNull(),

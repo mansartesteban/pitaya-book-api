@@ -12,12 +12,15 @@ import {
   downloadMultiplePhotos,
   addParentGallery,
   removeParentGallery,
+  deletePhotoCover,
+  uploadPhotoCover,
 } from "./gallery.actions.js"
 import {
   addParentGalleryValidator,
   createGalleryValidator,
   deleteGalleryValidator,
   deleteMultiplePhotosValidator,
+  deletePhotoCoverValidator,
   deletePhotoValidator,
   downloadMultiplePhotosValidator,
   downloadPhotoValidator,
@@ -25,6 +28,7 @@ import {
   removeParentGalleryValidator,
   updateGalleryValidator,
   updatePhotoValidator,
+  uploadPhotoCoverValidator,
   uploadPhotoValidator,
 } from "./gallery.validators.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
@@ -92,6 +96,20 @@ export default function galleryRoutes(fastify) {
       preHandler: [authenticationMiddleware, deletePhotoValidator],
     },
     deletePhoto
+  )
+  fastify.post(
+    "/:galleryId/photo-cover",
+    {
+      preHandler: [authenticationMiddleware, uploadPhotoCoverValidator],
+    },
+    uploadPhotoCover
+  )
+  fastify.delete(
+    "/:galleryId/photo-cover",
+    {
+      preHandler: [authenticationMiddleware, deletePhotoCoverValidator],
+    },
+    deletePhotoCover
   )
   fastify.post(
     "/:galleryId/photos/delete",

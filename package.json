@@ -47,6 +47,7 @@
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-import": "^2.29.0",
+    "k6": "^0.0.0",
     "nodemon": "^3.1.11",
     "pino": "^10.3.0"
   },

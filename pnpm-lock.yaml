@@ -99,6 +99,9 @@ importers:
       eslint-plugin-import:
         specifier: ^2.29.0
         version: 2.31.0(eslint@8.57.1)
+      k6:
+        specifier: ^0.0.0
+        version: 0.0.0
       nodemon:
         specifier: ^3.1.11
         version: 3.1.11
@@ -1738,6 +1741,9 @@ packages:
 
   jws@4.0.1:
     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
+
+  k6@0.0.0:
+    resolution: {integrity: sha512-GAQSWayS2+LjbH5bkRi+pMPYyP1JSp7o+4j58ANZ762N/RH/SdlAT3CHHztnn8s/xgg8kYNM24Gd2IPo9b5W+g==}
 
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
@@ -4101,6 +4107,8 @@ snapshots:
     dependencies:
       jwa: 2.0.1
       safe-buffer: 5.2.1
+
+  k6@0.0.0: {}
 
   keyv@4.5.4:
     dependencies:

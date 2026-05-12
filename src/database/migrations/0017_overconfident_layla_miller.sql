@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."photos" ADD COLUMN "is_cover_photo" boolean DEFAULT false NOT NULL;

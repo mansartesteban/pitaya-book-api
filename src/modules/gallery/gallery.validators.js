@@ -81,6 +81,18 @@ export const deletePhotoValidator = createValidator(
   },
   { source: "params" }
 )
+export const uploadPhotoCoverValidator = createValidator(
+  {
+    galleryId: [rules.required, rules.isUUID],
+  },
+  { source: "params" }
+)
+export const deletePhotoCoverValidator = createValidator(
+  {
+    galleryId: [rules.required, rules.isUUID],
+  },
+  { source: "params" }
+)
 
 export const deleteMultiplePhotosValidator = composeValidators(
   createValidator({

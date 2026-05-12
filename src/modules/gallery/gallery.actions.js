@@ -147,6 +147,7 @@ export const getOneGallery = async (request, reply) => {
         id: galleries.id,
         name: galleries.name,
         title: galleries.title,
+        coverPhotoId: galleries.coverPhotoId,
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
@@ -282,6 +283,14 @@ export const getOneGallery = async (request, reply) => {
       }
       return photo
     })
+
+    foundGallery.coverPhoto = foundGallery.photos.find(
+      (photo) => photo.id === foundGallery.coverPhotoId
+    )
+
+    foundGallery.photos = foundGallery.photos.filter(
+      (photo) => photo.id !== foundGallery.coverPhotoId
+    )
 
     return reply.code(200).send({ success: true, data: foundGallery })
   } catch (err) {
@@ -560,6 +569,200 @@ export const uploadPhoto = async (request, reply) => {
 }
 
 export const deletePhoto = async (request, reply) => {
+  try {
+    const { photoId, galleryId } = request.validated.params
+    const [foundPhoto] = await db
+      .select({ extension: photos.extension })
+      .from(photos)
+      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+
+    if (!foundPhoto) {
+      return reply
+        .code(404)
+        .send({ success: false, message: "La photo est introuvable" })
+    }
+
+    await BunnyStorageSDK.file.remove(
+      storageZone,
+      [
+        ["", galleryId, "thumbnails-300", photoId].join("/"),
+        foundPhoto.extension,
+      ].join(".")
+    )
+    await BunnyStorageSDK.file.remove(
+      storageZone,
+      [
+        ["", galleryId, "thumbnails-600", photoId].join("/"),
+        foundPhoto.extension,
+      ].join(".")
+    )
+    const deleted = await BunnyStorageSDK.file.remove(
+      storageZone,
+      [["", galleryId, photoId].join("/"), foundPhoto.extension].join(".")
+    )
+
+    if (deleted) {
+      await db
+        .delete(photos)
+        .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+
+      return reply.code(200).send({ success: true, message: "Photo supprimée" })
+    } else {
+      return reply.code(500).send({
+        success: false,
+        message: "Impossible de supprimer cette photo",
+      })
+    }
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Une erreur est survenue lors de la suppression de la photo",
+    })
+  }
+}
+export const uploadPhotoCover = async (request, reply) => {
+  try {
+    const part = await request.file()
+    part.file.on("limit", () => {
+      return reply.code(413).send({
+        success: false,
+        message: "Fichier trop volumineux (Maximum 10MB)",
+      })
+    })
+
+    const chunks = []
+    for await (const chunk of part.file) {
+      chunks.push(chunk)
+    }
+    const buffer = Buffer.concat(chunks)
+    const metadata = await sharp(buffer).metadata()
+
+    const { galleryId } = request.validated.params
+
+    const [foundGallery] = await db
+      .select({
+        id: galleries.id,
+        coverPhotoId: galleries.coverPhotoId,
+      })
+      .from(galleries)
+      .where(
+        and(
+          eq(galleries.id, galleryId),
+          eq(galleries.ownerUserId, request.user.id)
+        )
+      )
+
+    if (!foundGallery) {
+      return reply
+        .code(404)
+        .send({ success: false, message: "Aucune galerie correspondante" })
+    }
+
+    if (!part) {
+      return reply
+        .code(400)
+        .send({ success: false, message: "Aucun fichier reçu" })
+    }
+
+    await db
+      .delete(photos)
+      .where(
+        and(
+          eq(photos.id, foundGallery.coverPhotoId),
+          eq(photos.galleryId, galleryId)
+        )
+      )
+
+    let photoId = crypto.randomUUID()
+
+    let splittedFilename = part.filename.split(".")
+    let extension = splittedFilename.pop()
+    let filename = splittedFilename.join(".")
+    let uploadName = [photoId, extension].join(".")
+
+    let thumbnailSizes = [300, 600]
+
+    for (let size of thumbnailSizes) {
+      const resizedBuffer = await sharp(buffer)
+        .resize({ width: size })
+        .jpeg({ quality: 80 })
+        .toBuffer()
+
+      await BunnyStorageSDK.file.upload(
+        storageZone,
+        `/${foundGallery.id}/thumbnails-${size}/${uploadName}`,
+        resizedBuffer
+      )
+    }
+
+    const response = await BunnyStorageSDK.file.upload(
+      storageZone,
+      `/${foundGallery.id}/${uploadName}`,
+      buffer
+    )
+
+    if (!response) {
+      return reply.code(500).send({
+        success: false,
+        message: "Une erreur est survenue lors du téléchargement de l'image",
+      })
+    }
+    const [insertedPhoto] = await db
+      .insert(photos)
+      .values({
+        id: photoId,
+        isCoverPhoto: true,
+        galleryId: galleryId,
+        name: uploadName,
+        size: part.file.bytesRead,
+        width: metadata.width,
+        height: metadata.height,
+        ratio: metadata.width / metadata.height,
+        extension: extension,
+        filename: filename,
+        url: `/${foundGallery.id}/${uploadName}`,
+      })
+      .returning({
+        name: photos.name,
+        extension: photos.extension,
+        filename: photos.filename,
+        width: photos.width,
+        height: photos.height,
+        ratio: photos.ratio,
+        size: photos.size,
+        id: photos.id,
+        galleryId: photos.galleryId,
+      })
+
+    insertedPhoto.urls = {
+      300: signPhotoUrl(insertedPhoto, true, 300),
+      600: signPhotoUrl(insertedPhoto, true, 600),
+      original: signPhotoUrl(insertedPhoto, true),
+    }
+
+    await db
+      .update(galleries)
+      .set({ coverPhotoId: insertedPhoto.id })
+      .where(eq(galleries.id, galleryId))
+
+    return reply.code(200).send({ success: true, data: insertedPhoto })
+  } catch (err) {
+    if (err.code === "FST_REQ_FILE_TOO_LARGE") {
+      return reply.code(413).send({
+        success: false,
+        message: "Fichier trop volumineux (Maximum 10MB)",
+      })
+    }
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Une erreur est survenue lors de l'neovie de la photo",
+    })
+  }
+}
+
+export const deletePhotoCover = async (request, reply) => {
   try {
     const { photoId, galleryId } = request.validated.params
     const [foundPhoto] = await db
