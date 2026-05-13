@@ -33,7 +33,15 @@ export const updateGalleryValidator = composeValidators(
     visibility: [rules.required, rules.isNumber],
     description: [rules.isString],
     parentGalleryId: [rules.isUUID],
-    password: passwordRules,
+    password: [
+      rules.custom((value, { visibility }) => {
+        console.log("visibility", visibility, "value", value)
+        if (visibility === 0) {
+          return passwordRules
+        }
+        return true
+      }),
+    ],
   }),
   createValidator(
     {
