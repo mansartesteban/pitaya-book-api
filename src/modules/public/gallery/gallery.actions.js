@@ -307,13 +307,15 @@ const getPublicGallery = async (gallery, request, reply) => {
     )
     .limit(1)
 
-  gallery.coverPhoto = {
-    ...coverPhoto,
-    urls: {
-      300: signPhotoUrl(coverPhoto, true, 300),
-      600: signPhotoUrl(coverPhoto, true, 600),
-      original: signPhotoUrl(coverPhoto, true),
-    },
+  if (coverPhoto) {
+    gallery.coverPhoto = {
+      ...coverPhoto,
+      urls: {
+        300: signPhotoUrl(coverPhoto, true, 300),
+        600: signPhotoUrl(coverPhoto, true, 600),
+        original: signPhotoUrl(coverPhoto, true),
+      },
+    }
   }
 
   if (gallery.id !== rootGallery.id) {
