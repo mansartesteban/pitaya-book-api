@@ -1,7 +1,7 @@
 import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
 import { db } from "../../database/index.js"
 import { galleries, photos } from "../../database/schema.js"
-import { and, eq, inArray, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, sql } from "drizzle-orm"
 import slugify from "slugify"
 import crypto from "node:crypto"
 import archiver from "archiver"
@@ -128,6 +128,34 @@ export const getAllGalleries = async (request, reply) => {
     }
 
     foundGalleries = sortFlatHierarchical(foundGalleries)
+
+    return reply.code(200).send({ success: true, data: foundGalleries })
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Une erreur est survenue lors de la récupération des galeries",
+    })
+  }
+}
+
+export const getFreeGalleries = async (request, reply) => {
+  console.log("ici?")
+  try {
+    let foundGalleries = await db
+      .select({
+        id: galleries.id,
+        name: galleries.name,
+        title: galleries.title,
+        parentGallery: galleries.parentGallery,
+      })
+      .from(galleries)
+      .where(
+        and(
+          eq(galleries.ownerUserId, request.user.id),
+          isNull(galleries.parentGallery)
+        )
+      )
 
     return reply.code(200).send({ success: true, data: foundGalleries })
   } catch (err) {

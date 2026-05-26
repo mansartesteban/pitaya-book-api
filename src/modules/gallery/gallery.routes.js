@@ -14,6 +14,7 @@ import {
   removeParentGallery,
   deletePhotoCover,
   uploadPhotoCover,
+  getFreeGalleries,
 } from "./gallery.actions.js"
 import {
   addParentGalleryValidator,
@@ -47,6 +48,13 @@ export default function galleryRoutes(fastify) {
       preHandler: [authenticationMiddleware],
     },
     getAllGalleries
+  )
+  fastify.get(
+    "/free",
+    {
+      preHandler: [authenticationMiddleware],
+    },
+    getFreeGalleries
   )
   fastify.post(
     "/",
