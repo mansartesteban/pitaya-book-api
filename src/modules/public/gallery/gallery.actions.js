@@ -41,6 +41,7 @@ export const getAllGalleries = async (request, reply) => {
       .select({
         id: galleries.id,
         name: galleries.name,
+        createdAt: galleries.createdAt,
         title: galleries.title,
         coverPhotoId: galleries.coverPhotoId,
         description: galleries.description,
