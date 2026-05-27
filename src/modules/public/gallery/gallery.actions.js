@@ -6,11 +6,43 @@ import bcrypt from "bcrypt"
 
 export const getAllGalleries = async (request, reply) => {
   try {
+    // Récupère toutes les galeries pour reconstruire l'arbre
+    const allGalleries = await db
+      .select({
+        id: galleries.id,
+        parentGallery: galleries.parentGallery,
+        visibility: galleries.visibility,
+      })
+      .from(galleries)
+
+    const galleryMap = new Map(allGalleries.map((g) => [g.id, g]))
+
+    // Vérifie récursivement toute la chaîne des parents
+    function hasOnlyPublicParents(galleryId) {
+      let current = galleryMap.get(galleryId)
+
+      while (current?.parentGallery) {
+        const parent = galleryMap.get(current.parentGallery)
+
+        if (!parent) return false
+
+        if (parent.visibility !== "PUBLIC") {
+          return false
+        }
+
+        current = parent
+      }
+
+      return true
+    }
+
+    // Galeries publiques à afficher
     const foundGalleries = await db
       .select({
         id: galleries.id,
         name: galleries.name,
         title: galleries.title,
+        coverPhotoId: galleries.coverPhotoId,
         description: galleries.description,
         visibility: galleries.visibility,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
@@ -21,39 +53,69 @@ export const getAllGalleries = async (request, reply) => {
       .where(eq(galleries.visibility, "PUBLIC"))
       .groupBy(galleries.id)
 
-    for (let foundGallery of foundGalleries) {
-      const foundPhotos = await db
-        .select({
-          extension: photos.extension,
-          id: photos.id,
-          galleryId: photos.galleryId,
-        })
-        .from(photos)
-        .where(eq(photos.galleryId, foundGallery.id))
-        .limit(3)
-
-      foundGallery.photos = foundPhotos.map((photo) => {
-        photo.urls = {
-          300: signPhotoUrl(photo, true, 300),
-          600: signPhotoUrl(photo, true, 600),
-          original: signPhotoUrl(photo, true),
-        }
-        return photo
+    // Récupération de toutes les photos en une requête
+    const foundPhotos = await db
+      .select({
+        extension: photos.extension,
+        id: photos.id,
+        galleryId: photos.galleryId,
       })
+      .from(photos)
+
+    // Groupe les photos par galerie (max 3)
+    const photosByGallery = new Map()
+
+    for (const photo of foundPhotos) {
+      if (!photosByGallery.has(photo.galleryId)) {
+        photosByGallery.set(photo.galleryId, [])
+      }
+
+      const galleryPhotos = photosByGallery.get(photo.galleryId)
+
+      if (galleryPhotos.length < 3) {
+        galleryPhotos.push({
+          ...photo,
+          urls: {
+            300: signPhotoUrl(photo, true, 300),
+            600: signPhotoUrl(photo, true, 600),
+            original: signPhotoUrl(photo, true),
+          },
+        })
+      }
     }
 
+    // Ajoute les photos aux galeries
+    for (const gallery of foundGalleries) {
+      gallery.photos = photosByGallery.get(gallery.id) ?? []
+
+      gallery.coverPhoto = gallery.photos.find(
+        (photo) => photo.id === gallery.coverPhotoId
+      )
+
+      gallery.photos = gallery.photos.filter(
+        (photo) => photo.id !== gallery.coverPhotoId
+      )
+    }
+
+    const parentIds = new Set(
+      foundGalleries.map((g) => g.parentGallery).filter(Boolean)
+    )
+
+    // Filtrage
+    const filteredGalleries = foundGalleries.filter(
+      (g) =>
+        hasOnlyPublicParents(g.id) &&
+        (g.photos.length > 2 || parentIds.has(g.id))
+    )
+
+    // Construction arbre
     const map = new Map()
 
-    const filteredGalleries = foundGalleries.filter((g) => {
-      return (
-        g.photos.length > 2 ||
-        foundGalleries.map((gal) => gal.parentGallery).includes(g.id)
-      )
-    })
-
-    // indexation
     for (const g of filteredGalleries) {
-      map.set(g.id, { ...g, children: [] })
+      map.set(g.id, {
+        ...g,
+        children: [],
+      })
     }
 
     const roots = []
@@ -74,6 +136,7 @@ export const getAllGalleries = async (request, reply) => {
     })
   } catch (err) {
     request.log.error(err)
+
     return reply.code(500).send({
       success: false,
       message: "Une erreur est survenue lors de la récupération des galeries",
@@ -180,10 +243,16 @@ const getPublicGallery = async (gallery, request, reply) => {
       id: galleries.id,
       name: galleries.name,
       title: galleries.title,
+
       description: galleries.description,
     })
     .from(galleries)
-    .where(eq(galleries.parentGallery, gallery.id))
+    .where(
+      and(
+        eq(galleries.parentGallery, gallery.id),
+        eq(galleries.visibility, "PUBLIC")
+      )
+    )
 
   if (childrenGalleries.length > 0) {
     for (let childrenGallery of childrenGalleries) {
@@ -212,7 +281,12 @@ const getPublicGallery = async (gallery, request, reply) => {
         const subsubGalleries = await db
           .select({ id: galleries.id })
           .from(galleries)
-          .where(eq(galleries.parentGallery, childrenGallery.id))
+          .where(
+            and(
+              eq(galleries.parentGallery, childrenGallery.id),
+              eq(galleries.visibility, "PUBLIC")
+            )
+          )
         if (subsubGalleries) {
           const foundSubPhotos = await db
             .select({
@@ -242,10 +316,9 @@ const getPublicGallery = async (gallery, request, reply) => {
         }
       }
     }
-    gallery.children = childrenGalleries
-    // .filter(
-    //   (child) => child.photos.length >= 3
-    // )
+    gallery.children = childrenGalleries.filter(
+      (child) => child.photos.length >= 3
+    )
   } else {
     const foundPhotos = await db
       .select({
