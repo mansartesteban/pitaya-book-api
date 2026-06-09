@@ -446,11 +446,14 @@ export const downloadPrivateGallery = async (request, reply) => {
     strict: true,
   })
 
+  const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
+  const stat = fs.statSync(zipPath)
+
   reply
     .header("Content-Type", "application/zip")
     .header("Content-Disposition", `attachment; filename="${filename}.zip"`)
+    .header("Content-Length", stat.size)
 
-  const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
   const stream = fs.createReadStream(zipPath)
 
   return reply.send(stream)
