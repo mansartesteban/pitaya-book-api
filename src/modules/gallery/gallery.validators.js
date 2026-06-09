@@ -1,6 +1,7 @@
 import {
   createValidator,
   composeValidators,
+  runRules,
 } from "../../lib/validators/composer.js"
 import { rules } from "../../lib/validators/rules.js"
 import { passwordRules } from "../../lib/validators/commons.js"
@@ -35,9 +36,8 @@ export const updateGalleryValidator = composeValidators(
     parentGalleryId: [rules.isUUID],
     password: [
       rules.custom((value, { visibility }) => {
-        console.log("visibility", visibility, "value", value)
         if (visibility === 0) {
-          return passwordRules
+          return runRules(value, { visibility }, passwordRules)
         }
         return true
       }),

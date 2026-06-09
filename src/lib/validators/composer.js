@@ -55,3 +55,11 @@ export function composeValidators(...validators) {
     }
   }
 }
+
+export const runRules = async (value, data, rulesArray) => {
+  for (const rule of rulesArray) {
+    const result = await rule(value, data)
+    if (result !== true) return result
+  }
+  return true
+}
