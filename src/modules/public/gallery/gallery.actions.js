@@ -5,6 +5,9 @@ import { signPhotoUrl } from "../../../lib/utils/Photo.js"
 import bcrypt from "bcrypt"
 import archiver from "archiver"
 import { Readable } from "node:stream"
+import slugify from "slugify"
+import path from "node:path"
+import fs from "node:fs"
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -352,7 +355,6 @@ const getPublicGallery = async (gallery, request, reply) => {
   let current = gallery
 
   while (current.parentGallery) {
-    console.log("in hilw", current.parentGallery)
     const [parent] = await db
       .select({
         id: galleries.id,
@@ -404,56 +406,101 @@ const getPublicGallery = async (gallery, request, reply) => {
   return reply.code(200).send({ success: true, data: gallery })
 }
 
+export const prepareDownloadPrivateGallery = async (request, reply) => {
+  const { galleryId } = request.validated.params
+
+  const [gallery] = await db
+    .select({
+      id: galleries.id,
+      title: galleries.title,
+    })
+    .from(galleries)
+    .where(eq(galleries.id, galleryId))
+
+  if (!gallery) {
+    return reply.code(404).send({ error: "Gallery not found" })
+  }
+
+  const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
+
+  await buildZip(zipPath, galleryId)
+
+  return reply
+    .code(200)
+    .send({ success: true, message: "Gallery ready for download" })
+}
+
 export const downloadPrivateGallery = async (request, reply) => {
   const { galleryId } = request.validated.params
 
-  const foundPhotos = await db
+  const [gallery] = await db
     .select({
-      id: photos.id,
-      filename: photos.filename,
-      extension: photos.extension,
-      galleryId: photos.galleryId,
+      id: galleries.id,
+      title: galleries.title,
     })
-    .from(photos)
-    .where(eq(photos.galleryId, galleryId))
+    .from(galleries)
+    .where(eq(galleries.id, galleryId))
 
-  reply.header("Content-Type", "application/zip")
-  reply.header("Content-Disposition", 'attachment; filename="gallery.zip"')
+  const filename = slugify(gallery.title, {
+    lower: true,
+    strict: true,
+  })
 
+  reply
+    .header("Content-Type", "application/zip")
+    .header("Content-Disposition", `attachment; filename="${filename}.zip"`)
+
+  const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
+  const stream = fs.createReadStream(zipPath)
+
+  return reply.send(stream)
+}
+
+export async function buildZip(zipPath, galleryId) {
+  await fs.promises.mkdir("tmp", { recursive: true })
+
+  const output = fs.createWriteStream(zipPath)
   const archive = archiver("zip", {
     zlib: { level: 9 },
   })
 
-  archive.pipe(reply.raw)
+  archive.pipe(output)
 
   archive.on("error", (err) => {
     throw err
   })
 
+  const foundPhotos = await db
+    .select({
+      id: photos.id,
+      filename: photos.filename,
+      galleryId: photos.galleryId,
+      extension: photos.extension,
+    })
+    .from(photos)
+    .where(eq(photos.galleryId, galleryId))
+
   for (const photo of foundPhotos) {
-    try {
-      let filename = [photo.filename, photo.extension].join(".")
-      const photoUrl = signPhotoUrl(photo, true)
+    const url =
+      process.env.PHOTO_CDN_URI +
+      `/${photo.galleryId}/${photo.id}.${photo.extension}`
 
-      const res = await fetch(photoUrl)
+    const res = await fetch(url)
 
-      if (!res.ok || !res.body) {
-        console.warn(`Skip ${filename} (fetch failed)`)
-        continue
-      }
+    if (!res.ok || !res.body) continue
 
-      // IMPORTANT: conversion WebStream -> Node Stream
-      const stream = Readable.fromWeb(res.body)
+    const stream = Readable.fromWeb(res.body)
 
-      archive.append(stream, {
-        name: filename,
-      })
-    } catch (err) {
-      console.warn(`Skip ${filename}`, err.message)
-    }
+    archive.append(stream, {
+      name: `${photo.filename}.${photo.extension}`,
+    })
   }
 
   await archive.finalize()
 
-  return reply
+  // attendre fin réelle écriture disque
+  await new Promise((resolve, reject) => {
+    output.on("close", resolve)
+    output.on("error", reject)
+  })
 }

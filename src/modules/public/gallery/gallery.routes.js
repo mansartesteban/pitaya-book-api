@@ -3,6 +3,7 @@ import {
   getAllGalleries,
   getGallery,
   getPrivateGallery,
+  prepareDownloadPrivateGallery,
 } from "./gallery.actions.js"
 import {
   getGalleryValidator,
@@ -30,6 +31,13 @@ export default function galleryRoutes(fastify) {
       preHandler: [getPrivateGalleryValidator],
     },
     getPrivateGallery
+  )
+  fastify.get(
+    "/:galleryId/prepare-download",
+    {
+      preHandler: [getGalleryValidator],
+    },
+    prepareDownloadPrivateGallery
   )
   fastify.get(
     "/:galleryId/download",

@@ -89,9 +89,13 @@ app.register(multipart, {
 
 await app.register(cors, {
   origin: [
+    "localhost:5173",
     "http://localhost:5173",
     "https://pitaya-photo.com",
     "https://www.pitaya-photo.com",
+    "http://localhost:5173/",
+    "https://pitaya-photo.com/",
+    "https://www.pitaya-photo.com/",
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
