@@ -3,6 +3,8 @@ import { galleries, photos } from "../../../database/schema.js"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
 import bcrypt from "bcrypt"
+import archiver from "archiver"
+import { Readable } from "node:stream"
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -263,6 +265,7 @@ const getPublicGallery = async (gallery, request, reply) => {
           width: photos.width,
           height: photos.height,
           ratio: photos.ratio,
+          size: photos.size,
           galleryId: photos.galleryId,
           extension: photos.extension,
         })
@@ -326,6 +329,7 @@ const getPublicGallery = async (gallery, request, reply) => {
         id: photos.id,
         width: photos.width,
         height: photos.height,
+        size: photos.size,
         ratio: photos.ratio,
         galleryId: photos.galleryId,
         extension: photos.extension,
@@ -398,4 +402,58 @@ const getPublicGallery = async (gallery, request, reply) => {
   }
 
   return reply.code(200).send({ success: true, data: gallery })
+}
+
+export const downloadPrivateGallery = async (request, reply) => {
+  const { galleryId } = request.validated.params
+
+  const foundPhotos = await db
+    .select({
+      id: photos.id,
+      filename: photos.filename,
+      extension: photos.extension,
+      galleryId: photos.galleryId,
+    })
+    .from(photos)
+    .where(eq(photos.galleryId, galleryId))
+
+  reply.header("Content-Type", "application/zip")
+  reply.header("Content-Disposition", 'attachment; filename="gallery.zip"')
+
+  const archive = archiver("zip", {
+    zlib: { level: 9 },
+  })
+
+  archive.pipe(reply.raw)
+
+  archive.on("error", (err) => {
+    throw err
+  })
+
+  for (const photo of foundPhotos) {
+    try {
+      let filename = [photo.filename, photo.extension].join(".")
+      const photoUrl = signPhotoUrl(photo, true)
+
+      const res = await fetch(photoUrl)
+
+      if (!res.ok || !res.body) {
+        console.warn(`Skip ${filename} (fetch failed)`)
+        continue
+      }
+
+      // IMPORTANT: conversion WebStream -> Node Stream
+      const stream = Readable.fromWeb(res.body)
+
+      archive.append(stream, {
+        name: filename,
+      })
+    } catch (err) {
+      console.warn(`Skip ${filename}`, err.message)
+    }
+  }
+
+  await archive.finalize()
+
+  return reply
 }
