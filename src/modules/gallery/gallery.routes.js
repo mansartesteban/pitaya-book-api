@@ -1,5 +1,6 @@
 import {
   updateGallery,
+  updateGalleryDownloadable,
   getAllGalleries,
   getOneGallery,
   createGallery,
@@ -28,6 +29,7 @@ import {
   getOneGalleryValidator,
   removeParentGalleryValidator,
   updateGalleryValidator,
+  updateGalleryDownloadableValidator,
   updatePhotoValidator,
   uploadPhotoCoverValidator,
   uploadPhotoValidator,
@@ -69,6 +71,13 @@ export default function galleryRoutes(fastify) {
       preHandler: [authenticationMiddleware, updateGalleryValidator],
     },
     updateGallery
+  )
+  fastify.patch(
+    "/:galleryId/downloadable",
+    {
+      preHandler: [authenticationMiddleware, updateGalleryDownloadableValidator],
+    },
+    updateGalleryDownloadable
   )
   fastify.put(
     "/:galleryId/parent-gallery",

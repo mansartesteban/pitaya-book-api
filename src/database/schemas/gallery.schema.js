@@ -1,4 +1,4 @@
-import { integer, pgEnum, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { boolean, integer, pgEnum, text, timestamp, uuid } from "drizzle-orm/pg-core"
 import { photos, users } from "../schema.js"
 import { companies } from "./company.schema.js"
 import { services } from "../../modules/service/service.schema.js"
@@ -17,6 +17,7 @@ export const galleries = pitaya.table("galleries", {
   title: text("title").notNull(),
   description: text("description"),
   visibility: galleryVisibility("visibility").notNull(),
+  downloadable: boolean("downloadable").default(false).notNull(),
 
   coverPhotoId: uuid("cover_photo_id").references(() => photos.id, {
     onDelete: "set null",

@@ -41,6 +41,7 @@ export const getAllGalleries = async (request, reply) => {
         title: galleries.title,
         description: galleries.description,
         visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
         serviceId: galleries.serviceId,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
         totalSize: sql`coalesce(sum(${photos.size}), 0)`.as("totalSize"),
@@ -179,6 +180,7 @@ export const getOneGallery = async (request, reply) => {
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
         serviceId: galleries.serviceId,
         parentGallery: galleries.parentGallery,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
@@ -342,6 +344,7 @@ export const createGallery = async (request, reply) => {
         name: name,
         title: request.validated.body.title,
         visibility: visibilities[request.validated.body.visibility],
+        downloadable: request.validated.body.downloadable === true,
         description: request.validated.body.description,
         ownerUserId: request.user.id,
       })
@@ -362,8 +365,14 @@ export const createGallery = async (request, reply) => {
 }
 export const updateGallery = async (request, reply) => {
   try {
-    const { title, visibility, description, password, parentGalleryId } =
-      request.validated.body
+    const {
+      title,
+      visibility,
+      downloadable,
+      description,
+      password,
+      parentGalleryId,
+    } = request.validated.body
 
     const name = slugify(title, {
       strict: true,
@@ -376,6 +385,9 @@ export const updateGallery = async (request, reply) => {
         name: name,
         title: title,
         visibility: visibilities[visibility],
+        ...(downloadable !== undefined
+          ? { downloadable: downloadable === true }
+          : {}),
         password: password,
         description: description,
         parentGallery: parentGalleryId,
@@ -385,6 +397,7 @@ export const updateGallery = async (request, reply) => {
         name: galleries.name,
         title: galleries.title,
         visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
         password: galleries.password,
         description: galleries.description,
       })
@@ -399,6 +412,32 @@ export const updateGallery = async (request, reply) => {
     return reply.code(500).send({
       success: false,
       message: "Une erreur est survenue lors de la modification de la galerie",
+    })
+  }
+}
+export const updateGalleryDownloadable = async (request, reply) => {
+  try {
+    const [updatedGallery] = await db
+      .update(galleries)
+      .set({ downloadable: request.validated.body.downloadable === true })
+      .where(
+        and(
+          eq(galleries.id, request.validated.params.galleryId),
+          eq(galleries.ownerUserId, request.user.id)
+        )
+      )
+      .returning({ downloadable: galleries.downloadable })
+
+    if (!updatedGallery) {
+      return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    }
+
+    return reply.code(200).send({ success: true, data: updatedGallery })
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({
+      success: false,
+      message: "Impossible de modifier le téléchargement de la galerie",
     })
   }
 }

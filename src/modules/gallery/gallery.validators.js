@@ -20,6 +20,7 @@ export const createGalleryValidator = createValidator({
     rules.maxLength(128),
   ],
   visibility: [rules.required, rules.isNumber],
+  downloadable: [rules.isBoolean],
   description: [rules.isString],
 })
 export const updateGalleryValidator = composeValidators(
@@ -32,6 +33,7 @@ export const updateGalleryValidator = composeValidators(
     ],
     name: [rules.isString],
     visibility: [rules.required, rules.isNumber],
+    downloadable: [rules.isBoolean],
     description: [rules.isString],
     parentGalleryId: [rules.isUUID],
     password: [
@@ -47,6 +49,13 @@ export const updateGalleryValidator = composeValidators(
     {
       galleryId: [rules.required, rules.isUUID],
     },
+    { source: "params" }
+  )
+)
+export const updateGalleryDownloadableValidator = composeValidators(
+  createValidator({ downloadable: [rules.required, rules.isBoolean] }),
+  createValidator(
+    { galleryId: [rules.required, rules.isUUID] },
     { source: "params" }
   )
 )

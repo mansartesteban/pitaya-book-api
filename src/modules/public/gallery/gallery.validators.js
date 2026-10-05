@@ -10,6 +10,13 @@ export const getGalleryValidator = createValidator(
   },
   { source: "params" }
 )
+export const getPhotoDownloadValidator = createValidator(
+  {
+    galleryId: [rules.required, rules.isUUID],
+    photoId: [rules.required, rules.isUUID],
+  },
+  { source: "params" }
+)
 export const getPrivateGalleryValidator = composeValidators(
   createValidator(
     {

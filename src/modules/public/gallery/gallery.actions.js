@@ -8,6 +8,8 @@ import { Readable } from "node:stream"
 import slugify from "slugify"
 import path from "node:path"
 import fs from "node:fs"
+import { canDownloadGallery, canDownloadPhoto, galleryAccessToken, isGalleryUnlocked } from "./downloadAccess.js"
+import { buildArchiveEntries } from "./archivePaths.js"
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -162,15 +164,18 @@ export const getGallery = async (request, reply) => {
         description: galleries.description,
         parentGallery: galleries.parentGallery,
         visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
       })
       .from(galleries)
       .where(and(eq(galleries.id, galleryId)))
 
-    if (foundGallery.visibility === "PRIVATE") {
-      const cookie = request.cookies[`gallery_${foundGallery.id}`]
+    if (!foundGallery) {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
 
-      if (cookie !== "1") {
-        reply.code(200).send({ success: true, data: foundGallery })
+    if (foundGallery.visibility === "PRIVATE") {
+      if (!isGalleryUnlocked(foundGallery, request)) {
+        return reply.code(200).send({ success: true, data: foundGallery })
       } else {
         return getPublicGallery(foundGallery, request, reply)
       }
@@ -199,10 +204,15 @@ export const getPrivateGallery = async (request, reply) => {
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
         parentGallery: galleries.parentGallery,
       })
       .from(galleries)
       .where(and(eq(galleries.id, galleryId)))
+
+    if (!foundGallery) {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
 
     if (foundGallery.visibility === "PRIVATE") {
       if (!foundGallery.password) {
@@ -216,17 +226,19 @@ export const getPrivateGallery = async (request, reply) => {
             .code(401)
             .send({ success: false, message: "Mot de passe incorrect" })
         } else {
-          reply.setCookie(`gallery_${foundGallery.id}`, "1", {
+          reply.setCookie(`gallery_${foundGallery.id}`, galleryAccessToken(foundGallery.id), {
             path: "/",
             maxAge: 60 * 60 * 24,
             httpOnly: true,
             sameSite: "lax",
           })
-          return getPublicGallery(foundGallery, request, reply)
+          const { password: galleryPassword, ...publicGallery } = foundGallery
+          return getPublicGallery(publicGallery, request, reply)
         }
       }
     } else {
-      return getPublicGallery(foundGallery, request, reply)
+      const { password: galleryPassword, ...publicGallery } = foundGallery
+      return getPublicGallery(publicGallery, request, reply)
     }
   } catch (err) {
     request.log.error(err)
@@ -413,12 +425,18 @@ export const prepareDownloadPrivateGallery = async (request, reply) => {
     .select({
       id: galleries.id,
       title: galleries.title,
+      visibility: galleries.visibility,
+      downloadable: galleries.downloadable,
     })
     .from(galleries)
     .where(eq(galleries.id, galleryId))
 
   if (!gallery) {
     return reply.code(404).send({ error: "Gallery not found" })
+  }
+
+  if (!canDownloadGallery(gallery, request)) {
+    return reply.code(403).send({ success: false, message: "Téléchargement non autorisé" })
   }
 
   const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
@@ -437,9 +455,19 @@ export const downloadPrivateGallery = async (request, reply) => {
     .select({
       id: galleries.id,
       title: galleries.title,
+      visibility: galleries.visibility,
+      downloadable: galleries.downloadable,
     })
     .from(galleries)
     .where(eq(galleries.id, galleryId))
+
+  if (!gallery) {
+    return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+  }
+
+  if (!canDownloadGallery(gallery, request)) {
+    return reply.code(403).send({ success: false, message: "Téléchargement non autorisé" })
+  }
 
   const filename = slugify(gallery.title, {
     lower: true,
@@ -447,6 +475,9 @@ export const downloadPrivateGallery = async (request, reply) => {
   })
 
   const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
+  if (!fs.existsSync(zipPath)) {
+    return reply.code(404).send({ success: false, message: "Téléchargement à préparer" })
+  }
   const stat = fs.statSync(zipPath)
 
   reply
@@ -459,19 +490,73 @@ export const downloadPrivateGallery = async (request, reply) => {
   return reply.send(stream)
 }
 
+export const downloadPublicPhoto = async (request, reply) => {
+  try {
+    const { galleryId, photoId } = request.validated.params
+    const [gallery] = await db
+      .select({
+        id: galleries.id,
+        visibility: galleries.visibility,
+        downloadable: galleries.downloadable,
+      })
+      .from(galleries)
+      .where(eq(galleries.id, galleryId))
+
+    if (!gallery) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    if (!canDownloadPhoto(gallery, request)) {
+      return reply.code(403).send({ success: false, message: "Téléchargement non autorisé" })
+    }
+
+    const [photo] = await db
+      .select({
+        id: photos.id,
+        galleryId: photos.galleryId,
+        filename: photos.filename,
+        extension: photos.extension,
+        url: photos.url,
+      })
+      .from(photos)
+      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+
+    if (!photo) return reply.code(404).send({ success: false, message: "Photo introuvable" })
+
+    const response = await fetch(signPhotoUrl(photo, true))
+    if (!response.ok || !response.body) throw new Error(`Photo CDN: ${response.status}`)
+
+    const base = slugify(photo.filename || "photo", { lower: false, strict: true }) || "photo"
+    const extension = photo.extension.replace(/[^a-zA-Z0-9]/g, "") || "jpg"
+    const filename = `${base}.${extension}`
+
+    reply.header("Content-Type", response.headers.get("content-type") || "application/octet-stream")
+    reply.header("Content-Disposition", `attachment; filename="${filename}"`)
+    const length = response.headers.get("content-length")
+    if (length) reply.header("Content-Length", length)
+    return reply.send(Readable.fromWeb(response.body))
+  } catch (error) {
+    request.log.error(error)
+    return reply.code(502).send({ success: false, message: "Photo indisponible" })
+  }
+}
+
 export async function buildZip(zipPath, galleryId) {
-  await fs.promises.mkdir("tmp", { recursive: true })
+  const galleryTree = await db.execute(sql`
+    WITH RECURSIVE tree AS (
+      SELECT id, title, parent_gallery_id, 0 AS depth, ARRAY[id] AS visited
+      FROM pitaya.galleries
+      WHERE id = ${galleryId}
 
-  const output = fs.createWriteStream(zipPath)
-  const archive = archiver("zip", {
-    zlib: { level: 9 },
-  })
+      UNION ALL
 
-  archive.pipe(output)
-
-  archive.on("error", (err) => {
-    throw err
-  })
+      SELECT child.id, child.title, child.parent_gallery_id,
+        tree.depth + 1, tree.visited || child.id
+      FROM pitaya.galleries child
+      JOIN tree ON child.parent_gallery_id = tree.id
+      WHERE child.visibility = 'PUBLIC' AND NOT child.id = ANY(tree.visited)
+    )
+    SELECT id, title, parent_gallery_id AS "parentGalleryId"
+    FROM tree
+    ORDER BY depth, title, id
+  `)
 
   const foundPhotos = await db
     .select({
@@ -481,29 +566,37 @@ export async function buildZip(zipPath, galleryId) {
       extension: photos.extension,
     })
     .from(photos)
-    .where(eq(photos.galleryId, galleryId))
+    .where(inArray(photos.galleryId, galleryTree.map((gallery) => gallery.id)))
 
-  for (const photo of foundPhotos) {
-    const url =
-      process.env.PHOTO_CDN_URI +
-      `/${photo.galleryId}/${photo.id}.${photo.extension}`
+  const entries = buildArchiveEntries(galleryId, galleryTree, foundPhotos)
+  await fs.promises.mkdir(path.dirname(zipPath), { recursive: true })
 
-    const res = await fetch(url)
-
-    if (!res.ok || !res.body) continue
-
-    const stream = Readable.fromWeb(res.body)
-
-    archive.append(stream, {
-      name: `${photo.filename}.${photo.extension}`,
-    })
-  }
-
-  await archive.finalize()
-
-  // attendre fin réelle écriture disque
-  await new Promise((resolve, reject) => {
+  const output = fs.createWriteStream(zipPath)
+  const archive = archiver("zip", { zlib: { level: 0 } })
+  const completed = new Promise((resolve, reject) => {
     output.on("close", resolve)
     output.on("error", reject)
+    archive.on("error", reject)
   })
+  archive.pipe(output)
+
+  try {
+    for (const { photo, name } of entries) {
+      const source = Readable.from((async function* () {
+        const response = await fetch(signPhotoUrl(photo, true))
+        if (!response.ok || !response.body) {
+          throw new Error(`Impossible de récupérer la photo ${photo.id}`)
+        }
+        yield* Readable.fromWeb(response.body)
+      })())
+      archive.append(source, { name })
+    }
+
+    await Promise.all([archive.finalize(), completed])
+  } catch (error) {
+    archive.abort()
+    output.destroy()
+    await fs.promises.rm(zipPath, { force: true })
+    throw error
+  }
 }
