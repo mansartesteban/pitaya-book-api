@@ -2,14 +2,21 @@ import { db } from "../../../database/index.js"
 import { galleries, photos } from "../../../database/schema.js"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
+import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
 import bcrypt from "bcrypt"
-import archiver from "archiver"
 import { Readable } from "node:stream"
 import slugify from "slugify"
 import path from "node:path"
 import fs from "node:fs"
 import { canDownloadGallery, canDownloadPhoto, galleryAccessToken, isGalleryUnlocked } from "./downloadAccess.js"
 import { buildArchiveEntries } from "./archivePaths.js"
+import { writeGalleryArchive } from "./archiveWriter.js"
+
+const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
+  BunnyStorageSDK.regions.StorageRegion.Falkenstein,
+  process.env.BUNNY_STORAGE_ZONE,
+  process.env.BUNNY_FTP_PASSWORD
+)
 
 export const getAllGalleries = async (request, reply) => {
   try {
@@ -441,7 +448,15 @@ export const prepareDownloadPrivateGallery = async (request, reply) => {
 
   const zipPath = path.join(process.cwd(), "tmp", `${gallery.id}.zip`)
 
-  await buildZip(zipPath, galleryId)
+  try {
+    await buildZip(zipPath, galleryId)
+  } catch (error) {
+    request.log.error(error)
+    return reply.code(502).send({
+      success: false,
+      message: "Impossible de préparer le téléchargement pour le moment. Réessayez plus tard.",
+    })
+  }
 
   return reply
     .code(200)
@@ -564,39 +579,14 @@ export async function buildZip(zipPath, galleryId) {
       filename: photos.filename,
       galleryId: photos.galleryId,
       extension: photos.extension,
+      url: photos.url,
     })
     .from(photos)
     .where(inArray(photos.galleryId, galleryTree.map((gallery) => gallery.id)))
 
   const entries = buildArchiveEntries(galleryId, galleryTree, foundPhotos)
-  await fs.promises.mkdir(path.dirname(zipPath), { recursive: true })
-
-  const output = fs.createWriteStream(zipPath)
-  const archive = archiver("zip", { zlib: { level: 0 } })
-  const completed = new Promise((resolve, reject) => {
-    output.on("close", resolve)
-    output.on("error", reject)
-    archive.on("error", reject)
+  await writeGalleryArchive(zipPath, entries, async (photo) => {
+    const { stream } = await BunnyStorageSDK.file.download(storageZone, photo.url)
+    return stream
   })
-  archive.pipe(output)
-
-  try {
-    for (const { photo, name } of entries) {
-      const source = Readable.from((async function* () {
-        const response = await fetch(signPhotoUrl(photo, true))
-        if (!response.ok || !response.body) {
-          throw new Error(`Impossible de récupérer la photo ${photo.id}`)
-        }
-        yield* Readable.fromWeb(response.body)
-      })())
-      archive.append(source, { name })
-    }
-
-    await Promise.all([archive.finalize(), completed])
-  } catch (error) {
-    archive.abort()
-    output.destroy()
-    await fs.promises.rm(zipPath, { force: true })
-    throw error
-  }
 }
