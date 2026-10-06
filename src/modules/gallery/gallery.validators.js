@@ -104,6 +104,13 @@ export const uploadPhotoCoverValidator = createValidator(
   },
   { source: "params" }
 )
+export const setPhotoCoverValidator = createValidator(
+  {
+    galleryId: [rules.required, rules.isUUID],
+    photoId: [rules.required, rules.isUUID],
+  },
+  { source: "params" }
+)
 export const deletePhotoCoverValidator = createValidator(
   {
     galleryId: [rules.required, rules.isUUID],

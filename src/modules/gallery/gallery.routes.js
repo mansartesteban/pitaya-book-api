@@ -15,6 +15,7 @@ import {
   removeParentGallery,
   deletePhotoCover,
   uploadPhotoCover,
+  setPhotoCover,
   getFreeGalleries,
 } from "./gallery.actions.js"
 import {
@@ -32,6 +33,7 @@ import {
   updateGalleryDownloadableValidator,
   updatePhotoValidator,
   uploadPhotoCoverValidator,
+  setPhotoCoverValidator,
   uploadPhotoValidator,
 } from "./gallery.validators.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
@@ -120,6 +122,13 @@ export default function galleryRoutes(fastify) {
       preHandler: [authenticationMiddleware, uploadPhotoCoverValidator],
     },
     uploadPhotoCover
+  )
+  fastify.put(
+    "/:galleryId/photo-cover/:photoId",
+    {
+      preHandler: [authenticationMiddleware, setPhotoCoverValidator],
+    },
+    setPhotoCover
   )
   fastify.delete(
     "/:galleryId/photo-cover",

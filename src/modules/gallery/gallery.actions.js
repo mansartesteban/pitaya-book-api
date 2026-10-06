@@ -298,6 +298,7 @@ export const getOneGallery = async (request, reply) => {
         width: photos.width,
         height: photos.height,
         galleryId: photos.galleryId,
+        isCoverPhoto: photos.isCoverPhoto,
       })
       .from(photos)
       .where(eq(photos.galleryId, galleryId))
@@ -322,7 +323,7 @@ export const getOneGallery = async (request, reply) => {
     )
 
     foundGallery.photos = foundGallery.photos.filter(
-      (photo) => photo.id !== foundGallery.coverPhotoId
+      (photo) => !photo.isCoverPhoto
     )
 
     return reply.code(200).send({ success: true, data: foundGallery })
@@ -705,6 +706,55 @@ export const deletePhoto = async (request, reply) => {
     })
   }
 }
+export const setPhotoCover = async (request, reply) => {
+  try {
+    const { galleryId, photoId } = request.validated.params
+    const [gallery] = await db
+      .select({ id: galleries.id, coverPhotoId: galleries.coverPhotoId })
+      .from(galleries)
+      .where(and(eq(galleries.id, galleryId), eq(galleries.ownerUserId, request.user.id)))
+
+    if (!gallery) {
+      return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    }
+
+    const [photo] = await db
+      .select({
+        id: photos.id,
+        galleryId: photos.galleryId,
+        extension: photos.extension,
+        filename: photos.filename,
+      })
+      .from(photos)
+      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+
+    if (!photo) {
+      return reply.code(404).send({ success: false, message: "Photo introuvable dans cette galerie" })
+    }
+
+    await db.transaction(async (tx) => {
+      if (gallery.coverPhotoId && gallery.coverPhotoId !== photoId) {
+        await tx.update(photos)
+          .set({ isCoverPhoto: false })
+          .where(and(eq(photos.id, gallery.coverPhotoId), eq(photos.galleryId, galleryId)))
+      }
+      await tx.update(galleries)
+        .set({ coverPhotoId: photoId })
+        .where(eq(galleries.id, galleryId))
+    })
+
+    photo.urls = {
+      300: signPhotoUrl(photo, true, 300),
+      600: signPhotoUrl(photo, true, 600),
+      original: signPhotoUrl(photo, true),
+    }
+    return reply.code(200).send({ success: true, data: photo })
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({ success: false, message: "Impossible de modifier la photo de couverture" })
+  }
+}
+
 export const uploadPhotoCover = async (request, reply) => {
   try {
     const part = await request.file()
@@ -754,7 +804,8 @@ export const uploadPhotoCover = async (request, reply) => {
       .where(
         and(
           eq(photos.id, foundGallery.coverPhotoId),
-          eq(photos.galleryId, galleryId)
+          eq(photos.galleryId, galleryId),
+          eq(photos.isCoverPhoto, true)
         )
       )
 
@@ -848,54 +899,33 @@ export const uploadPhotoCover = async (request, reply) => {
 
 export const deletePhotoCover = async (request, reply) => {
   try {
-    const { photoId, galleryId } = request.validated.params
-    const [foundPhoto] = await db
-      .select({ extension: photos.extension })
-      .from(photos)
-      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+    const { galleryId } = request.validated.params
+    const [gallery] = await db
+      .select({ id: galleries.id, coverPhotoId: galleries.coverPhotoId })
+      .from(galleries)
+      .where(and(eq(galleries.id, galleryId), eq(galleries.ownerUserId, request.user.id)))
 
-    if (!foundPhoto) {
-      return reply
-        .code(404)
-        .send({ success: false, message: "La photo est introuvable" })
+    if (!gallery) {
+      return reply.code(404).send({ success: false, message: "Galerie introuvable" })
     }
 
-    await BunnyStorageSDK.file.remove(
-      storageZone,
-      [
-        ["", galleryId, "thumbnails-300", photoId].join("/"),
-        foundPhoto.extension,
-      ].join(".")
-    )
-    await BunnyStorageSDK.file.remove(
-      storageZone,
-      [
-        ["", galleryId, "thumbnails-600", photoId].join("/"),
-        foundPhoto.extension,
-      ].join(".")
-    )
-    const deleted = await BunnyStorageSDK.file.remove(
-      storageZone,
-      [["", galleryId, photoId].join("/"), foundPhoto.extension].join(".")
-    )
-
-    if (deleted) {
-      await db
-        .delete(photos)
-        .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
-
-      return reply.code(200).send({ success: true, message: "Photo supprimée" })
-    } else {
-      return reply.code(500).send({
-        success: false,
-        message: "Impossible de supprimer cette photo",
+    if (gallery.coverPhotoId) {
+      await db.transaction(async (tx) => {
+        await tx.update(photos)
+          .set({ isCoverPhoto: false })
+          .where(and(eq(photos.id, gallery.coverPhotoId), eq(photos.galleryId, galleryId)))
+        await tx.update(galleries)
+          .set({ coverPhotoId: null })
+          .where(eq(galleries.id, galleryId))
       })
     }
+
+    return reply.code(200).send({ success: true, message: "Couverture retirée" })
   } catch (err) {
     request.log.error(err)
     return reply.code(500).send({
       success: false,
-      message: "Une erreur est survenue lors de la suppression de la photo",
+      message: "Impossible de retirer la couverture",
     })
   }
 }

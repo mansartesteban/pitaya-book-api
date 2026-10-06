@@ -75,11 +75,14 @@ export const getAllGalleries = async (request, reply) => {
         extension: photos.extension,
         id: photos.id,
         galleryId: photos.galleryId,
+        isCoverPhoto: photos.isCoverPhoto,
       })
       .from(photos)
 
-    // Groupe les photos par galerie (max 3)
+    // Groupe les photos ordinaires par galerie (max 3), sans perdre les couvertures.
     const photosByGallery = new Map()
+    const coverPhotos = new Map()
+    const coverIds = new Set(foundGalleries.map((gallery) => gallery.coverPhotoId).filter(Boolean))
 
     for (const photo of foundPhotos) {
       if (!photosByGallery.has(photo.galleryId)) {
@@ -87,16 +90,19 @@ export const getAllGalleries = async (request, reply) => {
       }
 
       const galleryPhotos = photosByGallery.get(photo.galleryId)
+      if (!coverIds.has(photo.id) && (photo.isCoverPhoto || galleryPhotos.length >= 3)) continue
+      const signedPhoto = {
+        ...photo,
+        urls: {
+          300: signPhotoUrl(photo, true, 300),
+          600: signPhotoUrl(photo, true, 600),
+          original: signPhotoUrl(photo, true),
+        },
+      }
+      if (coverIds.has(photo.id)) coverPhotos.set(photo.id, signedPhoto)
 
-      if (galleryPhotos.length < 3) {
-        galleryPhotos.push({
-          ...photo,
-          urls: {
-            300: signPhotoUrl(photo, true, 300),
-            600: signPhotoUrl(photo, true, 600),
-            original: signPhotoUrl(photo, true),
-          },
-        })
+      if (!photo.isCoverPhoto && galleryPhotos.length < 3) {
+        galleryPhotos.push(signedPhoto)
       }
     }
 
@@ -104,13 +110,7 @@ export const getAllGalleries = async (request, reply) => {
     for (const gallery of foundGalleries) {
       gallery.photos = photosByGallery.get(gallery.id) ?? []
 
-      gallery.coverPhoto = gallery.photos.find(
-        (photo) => photo.id === gallery.coverPhotoId
-      )
-
-      gallery.photos = gallery.photos.filter(
-        (photo) => photo.id !== gallery.coverPhotoId
-      )
+      gallery.coverPhoto = coverPhotos.get(gallery.coverPhotoId)
     }
 
     const parentIds = new Set(
@@ -172,6 +172,7 @@ export const getGallery = async (request, reply) => {
       parentGallery: galleries.parentGallery,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      coverPhotoId: galleries.coverPhotoId,
     }
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(galleryId)
     let [foundGallery] = isUuid ? await db
@@ -223,6 +224,7 @@ export const getPrivateGallery = async (request, reply) => {
         password: galleries.password,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        coverPhotoId: galleries.coverPhotoId,
         parentGallery: galleries.parentGallery,
       })
       .from(galleries)
@@ -280,6 +282,7 @@ const getPublicGallery = async (gallery, request, reply) => {
       name: galleries.name,
       slug: galleries.slug,
       title: galleries.title,
+      coverPhotoId: galleries.coverPhotoId,
 
       description: galleries.description,
     })
@@ -302,11 +305,12 @@ const getPublicGallery = async (gallery, request, reply) => {
           size: photos.size,
           galleryId: photos.galleryId,
           extension: photos.extension,
+          isCoverPhoto: photos.isCoverPhoto,
         })
         .from(photos)
         .where(eq(photos.galleryId, childrenGallery.id))
 
-      childrenGallery.photos = foundPhotos.map((photo) => {
+      const signedPhotos = foundPhotos.map((photo) => {
         photo.urls = {
           300: signPhotoUrl(photo, true, 300),
           600: signPhotoUrl(photo, true, 600),
@@ -314,6 +318,8 @@ const getPublicGallery = async (gallery, request, reply) => {
         }
         return photo
       })
+      childrenGallery.coverPhoto = signedPhotos.find((photo) => photo.id === childrenGallery.coverPhotoId)
+      childrenGallery.photos = signedPhotos.filter((photo) => !photo.isCoverPhoto)
 
       if (childrenGallery.photos.length === 0) {
         const subsubGalleries = await db
@@ -390,6 +396,7 @@ const getPublicGallery = async (gallery, request, reply) => {
       .select({
         id: galleries.id,
         parentGallery: galleries.parentGallery,
+        coverPhotoId: galleries.coverPhotoId,
         description: galleries.description,
         title: galleries.title,
       })
@@ -403,7 +410,9 @@ const getPublicGallery = async (gallery, request, reply) => {
   }
   let rootGallery = current
 
-  const [coverPhoto] = await db
+  const coverPhotoId = gallery.coverPhotoId || rootGallery.coverPhotoId
+  const coverGalleryId = gallery.coverPhotoId ? gallery.id : rootGallery.id
+  const [coverPhoto] = coverPhotoId ? await db
     .select({
       id: photos.id,
       width: photos.width,
@@ -414,9 +423,9 @@ const getPublicGallery = async (gallery, request, reply) => {
     })
     .from(photos)
     .where(
-      and(eq(photos.galleryId, rootGallery.id), eq(photos.isCoverPhoto, true))
+      and(eq(photos.id, coverPhotoId), eq(photos.galleryId, coverGalleryId))
     )
-    .limit(1)
+    .limit(1) : []
 
   if (coverPhoto) {
     gallery.coverPhoto = {
