@@ -141,6 +141,13 @@
       "when": 1791269184378,
       "tag": "0019_gallery-slugs",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791300000000,
+      "tag": "0020_article-cms",
+      "breakpoints": true
     }
   ]
 }
