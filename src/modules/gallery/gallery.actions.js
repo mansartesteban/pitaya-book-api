@@ -9,6 +9,7 @@ import sharp from "sharp"
 import bcrypt from "bcrypt"
 import { pipeline } from "node:stream/promises"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
+import { slugBase } from "./gallerySlug.js"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -38,6 +39,7 @@ export const getAllGalleries = async (request, reply) => {
       .select({
         id: galleries.id,
         name: galleries.name,
+        slug: galleries.slug,
         title: galleries.title,
         description: galleries.description,
         visibility: galleries.visibility,
@@ -175,6 +177,7 @@ export const getOneGallery = async (request, reply) => {
       .select({
         id: galleries.id,
         name: galleries.name,
+        slug: galleries.slug,
         title: galleries.title,
         coverPhotoId: galleries.coverPhotoId,
         description: galleries.description,
@@ -338,19 +341,32 @@ export const createGallery = async (request, reply) => {
       strict: true,
       lower: true,
     })
-    const [createdGallery] = await db
-      .insert(galleries)
-      .values({
-        name: name,
-        title: request.validated.body.title,
-        visibility: visibilities[request.validated.body.visibility],
-        downloadable: request.validated.body.downloadable === true,
-        description: request.validated.body.description,
-        ownerUserId: request.user.id,
-      })
-      .returning({
-        id: galleries.id,
-      })
+    const visibility = visibilities[request.validated.body.visibility]
+    const base = slugBase(request.validated.body.title, visibility)
+    let createdGallery
+
+    for (let suffix = 1; suffix <= 100; suffix++) {
+      const slug = suffix === 1 ? base : `${base}-${suffix}`
+      const [created] = await db
+        .insert(galleries)
+        .values({
+          name,
+          slug,
+          title: request.validated.body.title,
+          visibility,
+          downloadable: request.validated.body.downloadable === true,
+          description: request.validated.body.description,
+          ownerUserId: request.user.id,
+        })
+        .onConflictDoNothing({ target: galleries.slug })
+        .returning({ id: galleries.id })
+      if (created) {
+        createdGallery = created
+        break
+      }
+    }
+
+    if (!createdGallery) throw new Error("Impossible de créer un slug unique")
 
     return reply
       .code(201)
@@ -395,6 +411,7 @@ export const updateGallery = async (request, reply) => {
       .where(eq(galleries.id, request.validated.params.galleryId))
       .returning({
         name: galleries.name,
+        slug: galleries.slug,
         title: galleries.title,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,

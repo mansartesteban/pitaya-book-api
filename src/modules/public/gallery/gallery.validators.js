@@ -6,7 +6,7 @@ import { rules } from "../../../lib/validators/rules.js"
 
 export const getGalleryValidator = createValidator(
   {
-    galleryId: [rules.required, rules.isUUID],
+    galleryId: [rules.required, rules.isString, rules.maxLength(240), rules.matches(/^[a-zA-Z0-9-]+$/)],
   },
   { source: "params" }
 )

@@ -134,6 +134,13 @@
       "when": 1791224485356,
       "tag": "0018_gallery-downloadable",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791269184378,
+      "tag": "0019_gallery-slugs",
+      "breakpoints": true
     }
   ]
 }

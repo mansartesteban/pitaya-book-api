@@ -14,6 +14,7 @@ export const galleryVisibility = pitaya.enum("gallery_visibility", [
 export const galleries = pitaya.table("galleries", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   description: text("description"),
   visibility: galleryVisibility("visibility").notNull(),

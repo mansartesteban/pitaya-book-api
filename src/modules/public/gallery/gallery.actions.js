@@ -55,6 +55,7 @@ export const getAllGalleries = async (request, reply) => {
       .select({
         id: galleries.id,
         name: galleries.name,
+        slug: galleries.slug,
         createdAt: galleries.createdAt,
         title: galleries.title,
         coverPhotoId: galleries.coverPhotoId,
@@ -162,19 +163,28 @@ export const getAllGalleries = async (request, reply) => {
 export const getGallery = async (request, reply) => {
   try {
     const { galleryId } = request.validated.params
+    const galleryFields = {
+      id: galleries.id,
+      name: galleries.name,
+      slug: galleries.slug,
+      title: galleries.title,
+      description: galleries.description,
+      parentGallery: galleries.parentGallery,
+      visibility: galleries.visibility,
+      downloadable: galleries.downloadable,
+    }
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(galleryId)
+    let [foundGallery] = isUuid ? await db
+      .select(galleryFields)
+      .from(galleries)
+      .where(eq(galleries.id, galleryId)) : []
 
-    const [foundGallery] = await db
+    if (!foundGallery) [foundGallery] = await db
       .select({
-        id: galleries.id,
-        name: galleries.name,
-        title: galleries.title,
-        description: galleries.description,
-        parentGallery: galleries.parentGallery,
-        visibility: galleries.visibility,
-        downloadable: galleries.downloadable,
+        ...galleryFields,
       })
       .from(galleries)
-      .where(and(eq(galleries.id, galleryId)))
+      .where(eq(galleries.slug, galleryId))
 
     if (!foundGallery) {
       return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
@@ -207,6 +217,7 @@ export const getPrivateGallery = async (request, reply) => {
       .select({
         id: galleries.id,
         name: galleries.name,
+        slug: galleries.slug,
         title: galleries.title,
         description: galleries.description,
         password: galleries.password,
@@ -267,6 +278,7 @@ const getPublicGallery = async (gallery, request, reply) => {
     .select({
       id: galleries.id,
       name: galleries.name,
+      slug: galleries.slug,
       title: galleries.title,
 
       description: galleries.description,
