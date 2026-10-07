@@ -21,7 +21,14 @@ export const createGalleryValidator = createValidator({
   ],
   visibility: [rules.required, rules.isNumber],
   downloadable: [rules.isBoolean],
+  expiresAt: [rules.isDate],
+  clientCompanyId: [rules.isUUID],
   description: [rules.isString],
+  password: [
+    rules.custom((value, { visibility }) => visibility === 0
+      ? runRules(value, { visibility }, passwordRules)
+      : true),
+  ],
 })
 export const updateGalleryValidator = composeValidators(
   createValidator({
@@ -34,6 +41,8 @@ export const updateGalleryValidator = composeValidators(
     name: [rules.isString],
     visibility: [rules.required, rules.isNumber],
     downloadable: [rules.isBoolean],
+    expiresAt: [rules.isDate],
+    clientCompanyId: [rules.isUUID],
     description: [rules.isString],
     parentGalleryId: [rules.isUUID],
     password: [

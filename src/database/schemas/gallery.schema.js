@@ -19,6 +19,12 @@ export const galleries = pitaya.table("galleries", {
   description: text("description"),
   visibility: galleryVisibility("visibility").notNull(),
   downloadable: boolean("downloadable").default(false).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  expirationApplied: boolean("expiration_applied").default(false).notNull(),
+  reminderDays: integer("reminder_days").default(7).notNull(),
+  reminderValue: integer("reminder_value").default(7).notNull(),
+  reminderUnit: text("reminder_unit").default("DAY").notNull(),
+  clientCompanyId: uuid("client_company_id").references(() => companies.id, { onDelete: "set null" }),
 
   coverPhotoId: uuid("cover_photo_id").references(() => photos.id, {
     onDelete: "set null",

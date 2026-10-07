@@ -1,7 +1,7 @@
 import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
 import { db } from "../../database/index.js"
-import { galleries, photos } from "../../database/schema.js"
-import { and, eq, inArray, isNull, sql } from "drizzle-orm"
+import { companies, companyContacts, galleries, galleryReminderContacts, galleryReminders, galleryReminderRecipients, photos } from "../../database/schema.js"
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm"
 import slugify from "slugify"
 import crypto from "node:crypto"
 import archiver from "archiver"
@@ -10,6 +10,7 @@ import bcrypt from "bcrypt"
 import { pipeline } from "node:stream/promises"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
 import { slugBase } from "./gallerySlug.js"
+import { defaultGalleryReminders } from "./defaultGalleryReminders.js"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -22,6 +23,15 @@ const visibilities = {
   0: "PRIVATE",
   1: "UNLISTED",
   2: "PUBLIC",
+}
+
+const validClientCompany = async (companyId, userId) => {
+  if (companyId == null) return true
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(companyId)) return false
+  const [company] = await db.select({ id: companies.id }).from(companies).where(and(
+    eq(companies.id, companyId), or(eq(companies.userId, userId), isNull(companies.userId))
+  ))
+  return Boolean(company)
 }
 
 const sortFlatHierarchical = (galleries) => {
@@ -44,6 +54,8 @@ export const getAllGalleries = async (request, reply) => {
         description: galleries.description,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        expiresAt: galleries.expiresAt,
+        clientCompanyId: galleries.clientCompanyId,
         serviceId: galleries.serviceId,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
         totalSize: sql`coalesce(sum(${photos.size}), 0)`.as("totalSize"),
@@ -184,6 +196,8 @@ export const getOneGallery = async (request, reply) => {
         password: galleries.password,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        expiresAt: galleries.expiresAt,
+        clientCompanyId: galleries.clientCompanyId,
         serviceId: galleries.serviceId,
         parentGallery: galleries.parentGallery,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
@@ -338,36 +352,62 @@ export const getOneGallery = async (request, reply) => {
 
 export const createGallery = async (request, reply) => {
   try {
+    const clientCompanyId = request.validated.body.clientCompanyId ?? null
+    if (!await validClientCompany(clientCompanyId, request.user.id)) {
+      return reply.code(400).send({ success: false, message: "Client invalide" })
+    }
     const name = slugify(request.validated.body.title, {
       strict: true,
       lower: true,
     })
     const visibility = visibilities[request.validated.body.visibility]
     const base = slugBase(request.validated.body.title, visibility)
-    let createdGallery
-
-    for (let suffix = 1; suffix <= 100; suffix++) {
-      const slug = suffix === 1 ? base : `${base}-${suffix}`
-      const [created] = await db
-        .insert(galleries)
-        .values({
+    const expiresAt = request.validated.body.expiresAt ? new Date(request.validated.body.expiresAt) : null
+    const createdAt = new Date()
+    const createdGallery = await db.transaction(async (tx) => {
+      let created
+      for (let suffix = 1; suffix <= 100; suffix++) {
+        const slug = suffix === 1 ? base : `${base}-${suffix}`
+        const [inserted] = await tx.insert(galleries).values({
           name,
           slug,
           title: request.validated.body.title,
           visibility,
           downloadable: request.validated.body.downloadable === true,
+          expiresAt,
+          clientCompanyId,
+          password: visibility === "PRIVATE" ? request.validated.body.password : null,
           description: request.validated.body.description,
           ownerUserId: request.user.id,
-        })
-        .onConflictDoNothing({ target: galleries.slug })
-        .returning({ id: galleries.id })
-      if (created) {
-        createdGallery = created
-        break
+        }).onConflictDoNothing({ target: galleries.slug }).returning({ id: galleries.id })
+        if (inserted) {
+          created = inserted
+          break
+        }
       }
-    }
+      if (!created) throw new Error("Impossible de créer un slug unique")
 
-    if (!createdGallery) throw new Error("Impossible de créer un slug unique")
+      if (clientCompanyId) {
+        const defaults = defaultGalleryReminders(expiresAt, createdAt)
+        if (defaults.length) {
+          const contacts = await tx.select({ id: companyContacts.id, email: companyContacts.email })
+            .from(companyContacts).where(and(
+              eq(companyContacts.companyId, clientCompanyId),
+              eq(companyContacts.remindersEnabled, true)
+            ))
+          const contactIds = contacts.filter((contact) => contact.email).map((contact) => contact.id)
+          for (const reminder of defaults) {
+            const [saved] = await tx.insert(galleryReminders).values({
+              galleryId: created.id, ...reminder,
+            }).returning({ id: galleryReminders.id })
+            if (contactIds.length) await tx.insert(galleryReminderRecipients).values(
+              contactIds.map((contactId) => ({ reminderId: saved.id, contactId }))
+            )
+          }
+        }
+      }
+      return created
+    })
 
     return reply
       .code(201)
@@ -386,16 +426,48 @@ export const updateGallery = async (request, reply) => {
       title,
       visibility,
       downloadable,
+      expiresAt,
       description,
       password,
       parentGalleryId,
+      clientCompanyId,
     } = request.validated.body
+
+    if (clientCompanyId !== undefined && !await validClientCompany(clientCompanyId, request.user.id)) {
+      return reply.code(400).send({ success: false, message: "Client invalide" })
+    }
 
     const name = slugify(title, {
       strict: true,
       lower: true,
     })
 
+    const [currentGallery] = await db
+      .select({
+        visibility: galleries.visibility,
+        expiresAt: galleries.expiresAt,
+        clientCompanyId: galleries.clientCompanyId,
+      })
+      .from(galleries)
+      .where(and(
+        eq(galleries.id, request.validated.params.galleryId),
+        eq(galleries.ownerUserId, request.user.id)
+      ))
+    if (!currentGallery) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+
+    const nextExpiration = expiresAt ? new Date(expiresAt) : null
+    const expirationChanged = expiresAt !== undefined &&
+      (nextExpiration?.getTime() ?? null) !== (currentGallery.expiresAt?.getTime() ?? null)
+    const visibilityChanged = currentGallery.visibility !== visibilities[visibility]
+
+    if (clientCompanyId !== undefined && clientCompanyId !== currentGallery.clientCompanyId) {
+      await db.delete(galleryReminderContacts).where(eq(galleryReminderContacts.galleryId, request.validated.params.galleryId))
+      await db.delete(galleryReminderRecipients).where(inArray(
+        galleryReminderRecipients.reminderId,
+        db.select({ id: galleryReminders.id }).from(galleryReminders)
+          .where(eq(galleryReminders.galleryId, request.validated.params.galleryId))
+      ))
+    }
     const [updatedGallery] = await db
       .update(galleries)
       .set({
@@ -405,17 +477,25 @@ export const updateGallery = async (request, reply) => {
         ...(downloadable !== undefined
           ? { downloadable: downloadable === true }
           : {}),
+        ...(expiresAt !== undefined ? { expiresAt: nextExpiration } : {}),
+        ...(clientCompanyId !== undefined ? { clientCompanyId } : {}),
+        ...(expirationChanged || visibilityChanged ? { expirationApplied: false } : {}),
         password: password,
         description: description,
         parentGallery: parentGalleryId,
       })
-      .where(eq(galleries.id, request.validated.params.galleryId))
+      .where(and(
+        eq(galleries.id, request.validated.params.galleryId),
+        eq(galleries.ownerUserId, request.user.id)
+      ))
       .returning({
         name: galleries.name,
         slug: galleries.slug,
         title: galleries.title,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        expiresAt: galleries.expiresAt,
+        clientCompanyId: galleries.clientCompanyId,
         password: galleries.password,
         description: galleries.description,
       })
@@ -468,6 +548,8 @@ export const addParentGallery = async (request, reply) => {
       .update(galleries)
       .set({
         parentGallery: parentGalleryId,
+        expiresAt: null,
+        expirationApplied: false,
       })
       .where(eq(galleries.id, galleryId))
 

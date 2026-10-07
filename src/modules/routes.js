@@ -7,6 +7,7 @@ import mainRoutes from "./main/main.routes.js"
 import galleryRoutes from "./gallery/gallery.routes.js"
 import publicRoutes from "./public/public.routes.js"
 import articleRoutes from "./article/article.routes.js"
+import notificationRoutes from "./notifications/notification.routes.js"
 
 export default async (app) => {
   await app.register(authRoutes, { prefix: "/api/auth" })
@@ -18,4 +19,5 @@ export default async (app) => {
   await app.register(galleryRoutes, { prefix: "/api/gallery" })
   await app.register(publicRoutes, { prefix: "/api/public" })
   await app.register(articleRoutes, { prefix: "/api" })
+  await app.register(notificationRoutes, { prefix: "/api/notifications" })
 }

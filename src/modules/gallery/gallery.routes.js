@@ -37,8 +37,17 @@ import {
   uploadPhotoValidator,
 } from "./gallery.validators.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { applyGalleryExpirations } from "./galleryExpiration.js"
+import { listGalleryReminders, createGalleryReminder, updateGalleryReminder, deleteGalleryReminder, listGalleryReminderDeliveries, retryGalleryReminderDelivery } from "./galleryReminderSettings.js"
 
 export default function galleryRoutes(fastify) {
+  fastify.addHook("preHandler", applyGalleryExpirations)
+  fastify.get("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, listGalleryReminders)
+  fastify.post("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, createGalleryReminder)
+  fastify.put("/:galleryId/reminders/:reminderId", { preHandler: [authenticationMiddleware] }, updateGalleryReminder)
+  fastify.delete("/:galleryId/reminders/:reminderId", { preHandler: [authenticationMiddleware] }, deleteGalleryReminder)
+  fastify.get("/:galleryId/reminder-deliveries", { preHandler: [authenticationMiddleware] }, listGalleryReminderDeliveries)
+  fastify.post("/:galleryId/reminder-deliveries/:deliveryId/retry", { preHandler: [authenticationMiddleware] }, retryGalleryReminderDelivery)
   fastify.get(
     "/:galleryId",
     {

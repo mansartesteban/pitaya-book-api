@@ -11,8 +11,10 @@ import {
   getPhotoDownloadValidator,
   getPrivateGalleryValidator,
 } from "./gallery.validators.js"
+import { applyGalleryExpirations } from "../../gallery/galleryExpiration.js"
 
 export default function galleryRoutes(fastify) {
+  fastify.addHook("preHandler", applyGalleryExpirations)
   fastify.get(
     "/",
     {

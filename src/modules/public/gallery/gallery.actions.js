@@ -18,6 +18,30 @@ const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   process.env.BUNNY_FTP_PASSWORD
 )
 
+// A child never grants more public access than its ancestors. The gallery keeps
+// its own visibility in the database; this is only the effective public access.
+const getAncestorAccess = async (gallery, request) => {
+  const visited = new Set([gallery.id])
+  let parentId = gallery.parentGallery
+  let unlisted = false
+  while (parentId) {
+    if (visited.has(parentId)) return { blocked: true, unlisted }
+    visited.add(parentId)
+    const [parent] = await db.select({
+      id: galleries.id,
+      parentGallery: galleries.parentGallery,
+      visibility: galleries.visibility,
+    }).from(galleries).where(eq(galleries.id, parentId))
+    if (!parent || parent.visibility === "HIDDEN") return { blocked: true, unlisted }
+    if (parent.visibility === "PRIVATE" && !isGalleryUnlocked(parent, request)) {
+      return { blocked: true, unlisted }
+    }
+    if (parent.visibility === "UNLISTED") unlisted = true
+    parentId = parent.parentGallery
+  }
+  return { blocked: false, unlisted }
+}
+
 export const getAllGalleries = async (request, reply) => {
   try {
     // Récupère toutes les galeries pour reconstruire l'arbre
@@ -191,6 +215,18 @@ export const getGallery = async (request, reply) => {
       return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
     }
 
+    if (foundGallery.visibility === "HIDDEN") {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
+
+    const ancestorAccess = await getAncestorAccess(foundGallery, request)
+    if (ancestorAccess.blocked) {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
+    if (ancestorAccess.unlisted && foundGallery.visibility === "PUBLIC") {
+      foundGallery.visibility = "UNLISTED"
+    }
+
     if (foundGallery.visibility === "PRIVATE") {
       if (!isGalleryUnlocked(foundGallery, request)) {
         return reply.code(200).send({ success: true, data: foundGallery })
@@ -232,6 +268,18 @@ export const getPrivateGallery = async (request, reply) => {
 
     if (!foundGallery) {
       return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
+
+    if (foundGallery.visibility === "HIDDEN") {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
+
+    const ancestorAccess = await getAncestorAccess(foundGallery, request)
+    if (ancestorAccess.blocked) {
+      return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+    }
+    if (ancestorAccess.unlisted && foundGallery.visibility === "PUBLIC") {
+      foundGallery.visibility = "UNLISTED"
     }
 
     if (foundGallery.visibility === "PRIVATE") {
@@ -455,11 +503,16 @@ export const prepareDownloadPrivateGallery = async (request, reply) => {
       title: galleries.title,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      parentGallery: galleries.parentGallery,
     })
     .from(galleries)
     .where(eq(galleries.id, galleryId))
 
-  if (!gallery) {
+  if (!gallery || gallery.visibility === "HIDDEN") {
+    return reply.code(404).send({ error: "Gallery not found" })
+  }
+
+  if ((await getAncestorAccess(gallery, request)).blocked) {
     return reply.code(404).send({ error: "Gallery not found" })
   }
 
@@ -493,11 +546,16 @@ export const downloadPrivateGallery = async (request, reply) => {
       title: galleries.title,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      parentGallery: galleries.parentGallery,
     })
     .from(galleries)
     .where(eq(galleries.id, galleryId))
 
-  if (!gallery) {
+  if (!gallery || gallery.visibility === "HIDDEN") {
+    return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
+  }
+
+  if ((await getAncestorAccess(gallery, request)).blocked) {
     return reply.code(404).send({ success: false, message: "Aucune galerie trouvée" })
   }
 
@@ -534,11 +592,13 @@ export const downloadPublicPhoto = async (request, reply) => {
         id: galleries.id,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        parentGallery: galleries.parentGallery,
       })
       .from(galleries)
       .where(eq(galleries.id, galleryId))
 
-    if (!gallery) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    if (!gallery || gallery.visibility === "HIDDEN") return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    if ((await getAncestorAccess(gallery, request)).blocked) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
     if (!canDownloadPhoto(gallery, request)) {
       return reply.code(403).send({ success: false, message: "Téléchargement non autorisé" })
     }

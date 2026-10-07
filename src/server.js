@@ -8,6 +8,7 @@ import util from "node:util"
 import fastifyCookie from "@fastify/cookie"
 import { registerErrorHandler } from "./lib/middlewares/errorHandler.js"
 import routes from "./modules/routes.js"
+import { startGalleryReminderScheduler } from "./modules/gallery/galleryReminderScheduler.js"
 
 dotenv.config()
 
@@ -118,6 +119,7 @@ routes(app).then(() => {
       }
 
       app.log.info(`Server listening at ${addr}`)
+      startGalleryReminderScheduler(app.log)
     }
   )
 })

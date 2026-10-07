@@ -11,6 +11,7 @@ export const createCompanyValidator = createValidator({
   vatNumber: [rules.isNumber],
   siret: [
     rules.custom((siret) => {
+      if (!siret) return true // Siret is optional
       if (!/^\d{14}$/.test(siret)) {
         return "Le numéro de Siret renseigné ne respecte pas le format attendu : 14 chiffres"
       }
