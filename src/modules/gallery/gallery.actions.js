@@ -313,6 +313,7 @@ export const getOneGallery = async (request, reply) => {
         height: photos.height,
         galleryId: photos.galleryId,
         isCoverPhoto: photos.isCoverPhoto,
+        isHidden: photos.isHidden,
       })
       .from(photos)
       .where(eq(photos.galleryId, galleryId))

@@ -17,6 +17,7 @@ export const photos = pitaya.table("photos", {
     .references(() => galleries.id, { onDelete: "cascade" })
     .notNull(),
   isCoverPhoto: boolean("is_cover_photo").default(false).notNull(),
+  isHidden: boolean("is_hidden").default(false).notNull(),
   name: text("name"),
   filename: text("filename"),
   extension: text("extension").notNull(),

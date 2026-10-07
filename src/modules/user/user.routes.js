@@ -1,8 +1,9 @@
-import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
 import { getAllUsers, getUser } from "./user.actions.js"
 import { eq } from "drizzle-orm"
 import { db } from "../../database/index.js"
 import { dashboardLayouts } from "../../database/schema.js"
+import { listMyManagedGalleries } from "../gallery/galleryManagers.js"
 
 const widgetIds = ["clients", "galleries", "photos", "articles", "actions", "nextArticles", "upcoming"]
 const validLayout = (layout) => {
@@ -27,12 +28,13 @@ const validLayout = (layout) => {
 }
 
 export default function userRoutes(fastify) {
-  fastify.get("/me/dashboard-layout", { preHandler: [authenticationMiddleware] }, async (request, reply) => {
+  fastify.get("/me/managed-galleries", { preHandler: [authenticationMiddleware] }, listMyManagedGalleries)
+  fastify.get("/me/dashboard-layout", { preHandler: [authenticationMiddleware, adminMiddleware] }, async (request, reply) => {
     const [saved] = await db.select({ layout: dashboardLayouts.layout }).from(dashboardLayouts)
       .where(eq(dashboardLayouts.userId, request.user.id))
     return reply.send({ success: true, data: saved?.layout || null })
   })
-  fastify.put("/me/dashboard-layout", { preHandler: [authenticationMiddleware] }, async (request, reply) => {
+  fastify.put("/me/dashboard-layout", { preHandler: [authenticationMiddleware, adminMiddleware] }, async (request, reply) => {
     if (!validLayout(request.body)) return reply.code(400).send({ success: false, message: "Disposition invalide" })
     const layout = { columns: request.body.columns, rows: request.body.rows,
       widgets: request.body.widgets.map(({ id, x, y, width, height }) => ({ id, x, y, width, height })) }
@@ -49,7 +51,7 @@ export default function userRoutes(fastify) {
   )
   fastify.get(
     "/",
-    { preHandler: [authenticationMiddleware /* isAdmin */] },
+    { preHandler: [authenticationMiddleware, adminMiddleware] },
     getAllUsers
   )
 }

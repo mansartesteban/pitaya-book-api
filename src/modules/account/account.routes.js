@@ -4,6 +4,7 @@ import {
   updateProfile,
   hasPassword,
   updatePassword,
+  deleteAccount,
 } from "./account.actions.js"
 import {
   updatePasswordValidator,
@@ -11,6 +12,7 @@ import {
 } from "./account.validators.js"
 
 export default function accountRoutes(fastify) {
+  fastify.delete("/", { preHandler: [authenticationMiddleware] }, deleteAccount)
   fastify.get(
     "/profile",
     {

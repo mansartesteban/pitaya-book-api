@@ -8,6 +8,7 @@ import {
   forgotPassword,
   resetPassword,
   signOut,
+  resendVerification,
 } from "./auth.actions.js"
 import {
   signInFormValidator,
@@ -53,6 +54,7 @@ export default function authRoutes(fastify) {
     resetPassword
   )
   fastify.post("/verify-email", verifyEmail)
+  fastify.post("/resend-verification", { preHandler: [authenticationMiddleware] }, resendVerification)
 
   registerGoogleOAuth(fastify)
   fastify.get("/google/mobile/start", startMobileGoogleSignIn)

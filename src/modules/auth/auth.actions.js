@@ -4,7 +4,7 @@ import {
   sendVerificationMail,
   sendResetMail,
 } from "./auth.service.js"
-import { and, eq, gt } from "drizzle-orm"
+import { and, desc, eq, gt } from "drizzle-orm"
 import { db } from "../../database/index.js"
 import { users, emailTokens, mobileLoginCodes } from "../../database/schema.js"
 import bcrypt from "bcrypt"
@@ -56,18 +56,13 @@ export const exchangeMobileGoogleCode = async (request, reply) => {
 
 export const signIn = async (request, reply) => {
   try {
-    if (request.validated.body.email !== "esteban.mansart@gmail.com") {
-      return reply.code(403).send({
-        success: false,
-        message: "Cette fonctionnalité n'est pas encore accessible au public",
-      })
-    }
+    const email = request.validated.body.email.trim().toLowerCase()
     const [userFound] = await db
-      .select({ password: users.password, id: users.id, role: users.role })
+      .select({ password: users.password, id: users.id, role: users.role, isActive: users.isActive })
       .from(users)
-      .where(eq(users.email, request.validated.body.email))
+      .where(eq(users.email, email))
 
-    if (!userFound) {
+    if (!userFound?.isActive || !userFound.password) {
       return reply
         .code(403)
         .send({ success: false, message: "Invalid credentials" })
@@ -85,13 +80,13 @@ export const signIn = async (request, reply) => {
 
     const token = await reply.jwtSign({
       id: userFound.id,
-      email: userFound.email,
+      email,
       role: userFound.role,
     })
 
     reply.setCookie("access_token", token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
     })
@@ -109,18 +104,13 @@ export const signIn = async (request, reply) => {
 
 export const signUp = async (request, reply) => {
   try {
-    if (request.validated.body.email !== "esteban.mansart@gmail.com") {
-      return reply.code(403).send({
-        success: false,
-        message: "Cette fonctionnalité n'est pas encore accessible au public",
-      })
-    }
+    const email = request.validated.body.email.trim().toLowerCase()
     const hashed = await bcrypt.hash(request.validated.body.password, 10)
 
     const userFound = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, request.validated.body.email))
+      .where(eq(users.email, email))
 
     if (userFound.length > 0) {
       return reply
@@ -131,7 +121,7 @@ export const signUp = async (request, reply) => {
     const [insertedUser] = await db
       .insert(users)
       .values({
-        email: request.validated.body.email,
+        email,
         password: hashed,
         firstname: request.validated.body.firstname,
         lastname: request.validated.body.lastname,
@@ -168,7 +158,9 @@ export const signUp = async (request, reply) => {
 
     const verificationUrl = `${process.env.FRONTEND_URL}/authentication/verify-email?token=${verificationToken}`
 
-    sendVerificationMail(insertedUser, verificationUrl)
+    let verificationSent = true
+    try { await sendVerificationMail(insertedUser, verificationUrl) }
+    catch (error) { request.log.error(error); verificationSent = false }
 
     const token = await reply.jwtSign({
       id: insertedUser.id,
@@ -178,15 +170,16 @@ export const signUp = async (request, reply) => {
 
     reply.setCookie("access_token", token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
     })
 
     return reply.code(201).send({
       success: true,
-      message:
-        "Un email de vérification vous a été envoyé, il est valable 24h. Passé ce délai, rendez vous sur les paramètres du compte pour renvoyer un email de vérification",
+      message: verificationSent
+        ? "Un courriel de vérification vous a été envoyé. Le lien est valable 24 heures."
+        : "Compte créé, mais le courriel de vérification n'a pas pu être envoyé. Vous pourrez le renvoyer depuis votre espace.",
     })
   } catch (err) {
     request.log.error(err)
@@ -205,14 +198,28 @@ export const signOut = async (request, reply) => {
     .send({ success: true, message: "Vous avez été déconnecté" })
 }
 
-export const forgotPassword = async (request, reply) => {
-  if (request.validated.body.email !== "esteban.mansart@gmail.com") {
-    return reply.code(403).send({
-      success: false,
-      message: "Cette fonctionnalité n'est pas encore accessible au public",
-    })
+export const resendVerification = async (request, reply) => {
+  const [account] = await db.select({ id: users.id, email: users.email, firstname: users.firstname,
+    emailConfirmed: users.emailConfirmed }).from(users).where(eq(users.id, request.user.id))
+  if (!account) return reply.code(404).send({ success: false, message: "Compte introuvable" })
+  if (account.emailConfirmed) return reply.send({ success: true, message: "Adresse déjà confirmée" })
+  const [recent] = await db.select({ createdAt: emailTokens.createdAt }).from(emailTokens)
+    .where(and(eq(emailTokens.userId, account.id), eq(emailTokens.type, "email_verification")))
+    .orderBy(desc(emailTokens.createdAt)).limit(1)
+  if (recent && Date.now() - recent.createdAt.getTime() < 60 * 1000) {
+    return reply.code(429).send({ success: false, message: "Patientez une minute avant de renvoyer le courriel" })
   }
+  const token = await reply.jwtSign({ id: account.id, email: account.email, type: "email_verification" }, { expiresIn: "24h" })
+  await db.delete(emailTokens).where(and(eq(emailTokens.userId, account.id), eq(emailTokens.type, "email_verification")))
+  await db.insert(emailTokens).values({ userId: account.id, type: "email_verification", token,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+  await sendVerificationMail(account, `${process.env.FRONTEND_URL}/authentication/verify-email?token=${token}`)
+  return reply.send({ success: true, message: "Courriel de vérification envoyé" })
+}
+
+export const forgotPassword = async (request, reply) => {
   try {
+    const email = request.validated.body.email.trim().toLowerCase()
     const [userFound] = await db
       .select({
         email: users.email,
@@ -221,7 +228,7 @@ export const forgotPassword = async (request, reply) => {
         firstname: users.firstname,
       })
       .from(users)
-      .where(eq(users.email, request.validated.body.email))
+      .where(eq(users.email, email))
 
     if (!userFound) {
       return reply
@@ -254,7 +261,7 @@ export const forgotPassword = async (request, reply) => {
 
     const resetUrl = `${process.env.FRONTEND_URL}/authentication/reset-password?token=${verificationToken}`
 
-    sendResetMail(userFound, resetUrl)
+    await sendResetMail(userFound, resetUrl)
 
     return reply.code(200).send({ success: true, message: "Email envoyé" })
   } catch (err) {
@@ -290,7 +297,7 @@ export const resetPassword = async (request, reply) => {
       .select()
       .from(emailTokens)
       .where(eq(emailTokens.token, request.validated.body.token))
-    if (!emailToken) {
+    if (!emailToken || emailToken.type !== "reset_password" || emailToken.userId !== payload.id) {
       return reply.code(401).send({
         success: false,
         message: "Ce lien de vérification n'est plus valide",
@@ -366,7 +373,7 @@ export const verifyEmail = async (request, reply) => {
       .from(emailTokens)
       .where(eq(emailTokens.token, token))
 
-    if (!emailToken) {
+    if (!emailToken || emailToken.type !== "email_verification" || emailToken.userId !== payload.id) {
       return reply.code(401).send({
         success: false,
         message: "Ce lien de vérification n'est plus valide",
@@ -378,6 +385,11 @@ export const verifyEmail = async (request, reply) => {
       return reply
         .code(401)
         .send({ success: false, message: "Ce lien de vérification a expiré" })
+    }
+
+    const [currentAccount] = await db.select({ email: users.email }).from(users).where(eq(users.id, emailToken.userId))
+    if (!currentAccount || currentAccount.email !== payload.email) {
+      return reply.code(401).send({ success: false, message: "Cette adresse e-mail n'est plus celle du compte" })
     }
 
     // 4. Activation du compte
@@ -400,7 +412,7 @@ export const verifyEmail = async (request, reply) => {
 
     reply.setCookie("access_token", authToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
     })
@@ -429,15 +441,13 @@ export const googleCallback = async (request, reply) => {
     // Récupérer les infos utilisateur Google
     const googleUserInfo = await fetchGoogleUserInfo(token.token.access_token)
 
+    if (!googleUserInfo.verified_email) {
+      return reply.redirect(`${process.env.FRONTEND_URL}/authentication/sign-in-error`)
+    }
+
     // Trouver ou créer l'utilisateur
     const user = await findOrCreateGoogleUser(googleUserInfo)
 
-    if (user.email !== "esteban.mansart@gmail.com") {
-      return reply.code(403).send({
-        success: false,
-        message: "Cette fonctionnalité n'est pas encore accessible au public",
-      })
-    }
 
     const mobileFlow = request.cookies.mobile_google_flow
     if (mobileFlow) {
@@ -464,7 +474,7 @@ export const googleCallback = async (request, reply) => {
 
     reply.setCookie("access_token", sessionToken, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
     })

@@ -1,4 +1,4 @@
-import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
 import {
   createCompany,
   deleteCompany,
@@ -19,6 +19,8 @@ import {
 } from "./client.validators.js"
 
 export default function clientRoutes(fastify) {
+  fastify.addHook("preHandler", authenticationMiddleware)
+  fastify.addHook("preHandler", adminMiddleware)
   const validateContactPath = async (request, reply) => {
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!uuid.test(request.params.companyId) || (request.params.contactId && !uuid.test(request.params.contactId))) {

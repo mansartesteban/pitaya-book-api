@@ -8,7 +8,7 @@ import {
   updateService,
   uploadFileService,
 } from "./service.actions.js"
-import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
 import {
   createServiceValidator,
   deleteFileValidator,
@@ -20,6 +20,8 @@ import {
 } from "./service.validators.js"
 
 export default function serviceRoutes(fastify) {
+  fastify.addHook("preHandler", authenticationMiddleware)
+  fastify.addHook("preHandler", adminMiddleware)
   fastify.get(
     "/:id",
     {

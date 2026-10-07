@@ -20,7 +20,7 @@ const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
 
 // A child never grants more public access than its ancestors. The gallery keeps
 // its own visibility in the database; this is only the effective public access.
-const getAncestorAccess = async (gallery, request) => {
+export const getAncestorAccess = async (gallery, request) => {
   const visited = new Set([gallery.id])
   let parentId = gallery.parentGallery
   let unlisted = false
@@ -89,7 +89,7 @@ export const getAllGalleries = async (request, reply) => {
         parentGallery: galleries.parentGallery,
       })
       .from(galleries)
-      .leftJoin(photos, eq(photos.galleryId, galleries.id))
+      .leftJoin(photos, and(eq(photos.galleryId, galleries.id), eq(photos.isHidden, false)))
       .where(eq(galleries.visibility, "PUBLIC"))
       .groupBy(galleries.id)
 
@@ -102,6 +102,7 @@ export const getAllGalleries = async (request, reply) => {
         isCoverPhoto: photos.isCoverPhoto,
       })
       .from(photos)
+      .where(eq(photos.isHidden, false))
 
     // Groupe les photos ordinaires par galerie (max 3), sans perdre les couvertures.
     const photosByGallery = new Map()
@@ -356,7 +357,7 @@ const getPublicGallery = async (gallery, request, reply) => {
           isCoverPhoto: photos.isCoverPhoto,
         })
         .from(photos)
-        .where(eq(photos.galleryId, childrenGallery.id))
+        .where(and(eq(photos.galleryId, childrenGallery.id), eq(photos.isHidden, false)))
 
       const signedPhotos = foundPhotos.map((photo) => {
         photo.urls = {
@@ -390,12 +391,13 @@ const getPublicGallery = async (gallery, request, reply) => {
               extension: photos.extension,
             })
             .from(photos)
-            .where(
+            .where(and(
+              eq(photos.isHidden, false),
               inArray(
                 photos.galleryId,
                 subsubGalleries.map((s) => s.id)
               )
-            )
+            ))
             .limit(3)
           childrenGallery.photos = foundSubPhotos.map((photo) => {
             photo.urls = {
@@ -424,7 +426,7 @@ const getPublicGallery = async (gallery, request, reply) => {
       })
       .from(photos)
       .where(
-        and(eq(photos.galleryId, gallery.id), eq(photos.isCoverPhoto, false))
+        and(eq(photos.galleryId, gallery.id), eq(photos.isCoverPhoto, false), eq(photos.isHidden, false))
       )
 
     gallery.photos = foundPhotos.map((photo) => {
@@ -471,7 +473,7 @@ const getPublicGallery = async (gallery, request, reply) => {
     })
     .from(photos)
     .where(
-      and(eq(photos.id, coverPhotoId), eq(photos.galleryId, coverGalleryId))
+      and(eq(photos.id, coverPhotoId), eq(photos.galleryId, coverGalleryId), eq(photos.isHidden, false))
     )
     .limit(1) : []
 
@@ -612,7 +614,7 @@ export const downloadPublicPhoto = async (request, reply) => {
         url: photos.url,
       })
       .from(photos)
-      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+      .where(and(eq(photos.id, photoId), eq(photos.galleryId, galleryId), eq(photos.isHidden, false)))
 
     if (!photo) return reply.code(404).send({ success: false, message: "Photo introuvable" })
 
@@ -663,7 +665,7 @@ export async function buildZip(zipPath, galleryId) {
       url: photos.url,
     })
     .from(photos)
-    .where(inArray(photos.galleryId, galleryTree.map((gallery) => gallery.id)))
+    .where(and(inArray(photos.galleryId, galleryTree.map((gallery) => gallery.id)), eq(photos.isHidden, false)))
 
   const entries = buildArchiveEntries(galleryId, galleryTree, foundPhotos)
   await writeGalleryArchive(zipPath, entries, async (photo) => {

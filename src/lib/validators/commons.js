@@ -10,12 +10,10 @@ export const passwordRules = [
   rules.matches(/[^A-Za-z0-9]/, "Must contain at least 1 special caracter"),
 ]
 export const phoneRules = [
-  rules.matches(
-    /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/,
-    "Invalid phone format (e.g., +33123456789 or 0123456789)"
-  ),
-  rules.minLength(10),
-  rules.maxLength(20),
+  rules.custom((value) => !value || (
+    typeof value === "string" && value.length >= 10 && value.length <= 20 &&
+    /^[+]?[(]?[0-9]{1,4}[)]?[-\s.]?[(]?[0-9]{1,4}[)]?[-\s.]?[0-9]{1,9}$/.test(value)
+  ) || "Numéro de téléphone invalide"),
 ]
 export const jwtRules = [
   rules.required,

@@ -9,6 +9,8 @@ import fastifyCookie from "@fastify/cookie"
 import { registerErrorHandler } from "./lib/middlewares/errorHandler.js"
 import routes from "./modules/routes.js"
 import { startGalleryReminderScheduler } from "./modules/gallery/galleryReminderScheduler.js"
+import { cleanupGalleryViews } from "./modules/public/gallery/galleryStats.routes.js"
+import { cleanupPendingInteractions } from "./modules/public/interactions/interaction.routes.js"
 
 dotenv.config()
 
@@ -120,6 +122,10 @@ routes(app).then(() => {
 
       app.log.info(`Server listening at ${addr}`)
       startGalleryReminderScheduler(app.log)
+      cleanupGalleryViews().catch((error) => app.log.warn(error))
+      cleanupPendingInteractions().catch((error) => app.log.warn(error))
+      setInterval(() => cleanupGalleryViews().catch((error) => app.log.warn(error)), 24 * 60 * 60 * 1000).unref()
+      setInterval(() => cleanupPendingInteractions().catch((error) => app.log.warn(error)), 60 * 60 * 1000).unref()
     }
   )
 })

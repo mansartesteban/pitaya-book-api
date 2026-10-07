@@ -1,7 +1,8 @@
 import { db } from "../../database/index.js"
-import { users } from "../../database/schema.js"
+import { emailTokens, galleries, users } from "../../database/schema.js"
 import { eq } from "drizzle-orm"
 import bcrypt from "bcrypt"
+import { sendVerificationMail } from "../auth/auth.service.js"
 
 export const getProfile = async (request, reply) => {
   try {
@@ -32,6 +33,16 @@ export const getProfile = async (request, reply) => {
 
 export const updateProfile = async (request, reply) => {
   try {
+    const [current] = await db.select({ id: users.id, email: users.email, firstname: users.firstname })
+      .from(users).where(eq(users.id, request.user.id))
+    if (!current) return reply.code(404).send({ success: false, message: "Compte introuvable" })
+    const nextEmail = request.validated.body.email.trim().toLowerCase()
+    const emailChanged = nextEmail !== current.email.toLowerCase()
+    let verificationSent = true
+    if (emailChanged) {
+      const [used] = await db.select({ id: users.id }).from(users).where(eq(users.email, nextEmail))
+      if (used) return reply.code(409).send({ success: false, message: "Cette adresse e-mail est déjà utilisée" })
+    }
     const fields = {
       firstname: users.firstname,
       lastname: users.lastname,
@@ -44,19 +55,33 @@ export const updateProfile = async (request, reply) => {
       .set({
         firstname: request.validated.body.firstname,
         lastname: request.validated.body.lastname,
-        email: request.validated.body.email,
+        email: nextEmail,
+        ...(emailChanged ? { emailConfirmed: false } : {}),
         phone: request.validated.body.phone,
       })
       .where(eq(users.id, request.user.id))
       .returning({ ...fields, id: users.id })
 
-    if (updatedUser.length === 0) {
+    if (!updatedUser) {
       return reply.code(404).send({ success: false, message: "User not found" })
+    }
+
+    if (emailChanged) {
+      await db.delete(emailTokens).where(eq(emailTokens.userId, current.id))
+      const verificationToken = await reply.jwtSign({ id: current.id, email: nextEmail, type: "email_verification" }, { expiresIn: "24h" })
+      await db.insert(emailTokens).values({ userId: current.id, type: "email_verification", token: verificationToken,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+      try {
+        await sendVerificationMail({ firstname: updatedUser.firstname, email: nextEmail },
+          `${process.env.FRONTEND_URL}/authentication/verify-email?token=${verificationToken}`)
+      } catch (error) { request.log.error(error); verificationSent = false }
     }
 
     return reply
       .code(200)
-      .send({ success: true, data: updatedUser, message: "Profil mis à jour" })
+      .send({ success: true, data: updatedUser, message: emailChanged
+        ? verificationSent ? "Profil mis à jour. Confirmez votre nouvelle adresse e-mail." : "Profil mis à jour. Le courriel n'a pas pu être envoyé ; renvoyez-le depuis votre espace."
+        : "Profil mis à jour" })
   } catch (err) {
     request.log.error("Error updating user profile:", err)
     return reply.code(500).send({
@@ -69,7 +94,7 @@ export const updateProfile = async (request, reply) => {
 export const hasPassword = async (request, reply) => {
   try {
     const [foundAccount] = await db
-      .select({ password: users.password })
+      .select({ password: users.password, email: users.email })
       .from(users)
       .where(eq(users.id, request.user.id))
 
@@ -150,7 +175,7 @@ export const updatePassword = async (request, reply) => {
     return reply.code(200).send({
       success: true,
       message: "Password updated successfully",
-      data: { user: updatedAccount },
+      data: { updated: !!updatedAccount },
     })
   } catch (err) {
     request.log.error(err)
@@ -159,4 +184,15 @@ export const updatePassword = async (request, reply) => {
       message: "Erreur lors de la mise à jour du mot de passe",
     })
   }
+}
+
+export const deleteAccount = async (request, reply) => {
+  const [account] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, request.user.id))
+  if (!account) return reply.code(404).send({ success: false, message: "Compte introuvable" })
+  if (["ADMIN", "SUPERADMIN"].includes(account.role)) return reply.code(403).send({ success: false, message: "Compte administrateur non supprimable ici" })
+  const [ownedGallery] = await db.select({ id: galleries.id }).from(galleries).where(eq(galleries.ownerUserId, account.id)).limit(1)
+  if (ownedGallery) return reply.code(409).send({ success: false, message: "Ce compte possède une galerie" })
+  await db.delete(users).where(eq(users.id, account.id))
+  reply.clearCookie("access_token", { path: "/" })
+  return reply.code(204).send()
 }

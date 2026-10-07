@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."photos" ADD COLUMN "is_hidden" boolean DEFAULT false NOT NULL;

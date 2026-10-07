@@ -1,10 +1,11 @@
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../../database/index.js"
 import { adminNotifications } from "../../database/schema.js"
-import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
+import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
 
 export default function notificationRoutes(fastify) {
   fastify.addHook("preHandler", authenticationMiddleware)
+  fastify.addHook("preHandler", adminMiddleware)
   fastify.get("/", async (request, reply) => {
     const notifications = await db.select({
       id: adminNotifications.id, title: adminNotifications.title, body: adminNotifications.body,

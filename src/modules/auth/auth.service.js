@@ -1,6 +1,6 @@
 import { db } from "../../database/index.js"
 import { users } from "../../database/schema.js"
-import { Resend } from "resend"
+import nodemailer from "nodemailer"
 
 const mailTemplates = (user, verificationUrl) => [
   `<!DOCTYPE html>
@@ -183,15 +183,16 @@ export async function findOrCreateGoogleUser(googleUserInfo) {
   const [user] = await db
     .insert(users)
     .values({
-      email: googleUserInfo.email,
+      email: googleUserInfo.email.trim().toLowerCase(),
       firstname: googleUserInfo.given_name ?? "",
       lastname: googleUserInfo.family_name ?? "",
       password: null,
+      emailConfirmed: true,
       isActive: true,
     })
     .onConflictDoUpdate({
       target: users.email,
-      set: { lastLoginAt: new Date() },
+      set: { lastLoginAt: new Date(), emailConfirmed: true },
     })
     .returning()
 
@@ -222,25 +223,27 @@ export async function fetchGoogleUserInfo(accessToken) {
 // }
 
 export async function sendVerificationMail(user, verificationUrl) {
-  const resend = new Resend(process.env.RESEND_TOKEN)
-
-  const res = await resend.emails.send({
-    from: "PITAYA INC <onboarding@resend.dev>",
+  const transport = nodemailer.createTransport({ host: process.env.SMTP_SERVER,
+    port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
+    auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
+  await transport.sendMail({
+    from: `Pitaya Photo <${process.env.SMTP_FROM || "noreply@pitaya-photo.com"}>`,
     replyTo: "esteban.mansart@gmail.com",
     to: user.email,
-    subject: "Vérification de votre compte Pitaya Inc",
+    subject: "Vérification de votre compte Pitaya Photo",
     html: mailTemplates(user, verificationUrl)[0],
   })
 }
 
 export async function sendResetMail(user, resetUrl) {
-  const resend = new Resend(process.env.RESEND_TOKEN)
-
-  const res = await resend.emails.send({
-    from: "PITAYA INC <onboarding@resend.dev>",
+  const transport = nodemailer.createTransport({ host: process.env.SMTP_SERVER,
+    port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
+    auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
+  await transport.sendMail({
+    from: `Pitaya Photo <${process.env.SMTP_FROM || "noreply@pitaya-photo.com"}>`,
     replyTo: "esteban.mansart@gmail.com",
     to: user.email,
-    subject: "Réinitilialisation de votre mot de passe Pitaya Inc",
+    subject: "Réinitialisation de votre mot de passe Pitaya Photo",
     html: mailTemplates(user, resetUrl)[1],
   })
 }
