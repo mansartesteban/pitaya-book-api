@@ -4,11 +4,55 @@ import {
   sendVerificationMail,
   sendResetMail,
 } from "./auth.service.js"
-import { eq } from "drizzle-orm"
+import { and, eq, gt } from "drizzle-orm"
 import { db } from "../../database/index.js"
-import { users, emailTokens } from "../../database/schema.js"
+import { users, emailTokens, mobileLoginCodes } from "../../database/schema.js"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
+import crypto from "node:crypto"
+
+const mobileCodeHash = (value) => crypto.createHash("sha256").update(value).digest("hex")
+const mobileChallenge = (value) => crypto.createHash("sha256").update(value).digest("base64url")
+const mobileFlowPattern = /^[A-Za-z0-9_-]{32,128}$/
+
+export const startMobileGoogleSignIn = async (request, reply) => {
+  const { state, challenge } = request.query ?? {}
+  if (!mobileFlowPattern.test(state ?? "") || !mobileFlowPattern.test(challenge ?? "")) {
+    return reply.code(400).send({ success: false, message: "Demande de connexion invalide" })
+  }
+  reply.setCookie("mobile_google_flow", `${state}.${challenge}`, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/auth",
+    maxAge: 600,
+  })
+  return reply.redirect("/api/auth/google")
+}
+
+export const exchangeMobileGoogleCode = async (request, reply) => {
+  const { code, verifier } = request.body ?? {}
+  if (!mobileFlowPattern.test(code ?? "") || !mobileFlowPattern.test(verifier ?? "")) {
+    return reply.code(400).send({ success: false, message: "Code de connexion invalide" })
+  }
+  const [login] = await db.delete(mobileLoginCodes).where(and(
+    eq(mobileLoginCodes.codeHash, mobileCodeHash(code)),
+    eq(mobileLoginCodes.challenge, mobileChallenge(verifier)),
+    gt(mobileLoginCodes.expiresAt, new Date()),
+  )).returning({ userId: mobileLoginCodes.userId })
+  if (!login) return reply.code(401).send({ success: false, message: "Code expiré ou déjà utilisé" })
+  const [user] = await db.select({ id: users.id, email: users.email, role: users.role })
+    .from(users).where(eq(users.id, login.userId))
+  if (!user) return reply.code(401).send({ success: false, message: "Compte introuvable" })
+  const sessionToken = await reply.jwtSign(user)
+  reply.setCookie("access_token", sessionToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  })
+  return reply.send({ success: true })
+}
 
 export const signIn = async (request, reply) => {
   try {
@@ -393,6 +437,22 @@ export const googleCallback = async (request, reply) => {
         success: false,
         message: "Cette fonctionnalité n'est pas encore accessible au public",
       })
+    }
+
+    const mobileFlow = request.cookies.mobile_google_flow
+    if (mobileFlow) {
+      reply.clearCookie("mobile_google_flow", { path: "/api/auth" })
+      const [state, challenge, extra] = mobileFlow.split(".")
+      if (!extra && mobileFlowPattern.test(state ?? "") && mobileFlowPattern.test(challenge ?? "")) {
+        const code = crypto.randomBytes(32).toString("base64url")
+        await db.insert(mobileLoginCodes).values({
+          userId: user.id,
+          codeHash: mobileCodeHash(code),
+          challenge,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        })
+        return reply.redirect(`pitayatether://auth?code=${code}&state=${state}`)
+      }
     }
 
     // Créer le JWT de session

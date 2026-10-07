@@ -535,7 +535,7 @@ export const uploadPhoto = async (request, reply) => {
     part.file.on("limit", () => {
       return reply.code(413).send({
         success: false,
-        message: "Fichier trop volumineux (Maximum 10MB)",
+        message: "Fichier trop volumineux (Maximum 30MB)",
       })
     })
 
@@ -642,7 +642,7 @@ export const uploadPhoto = async (request, reply) => {
     if (err.code === "FST_REQ_FILE_TOO_LARGE") {
       return reply.code(413).send({
         success: false,
-        message: "Fichier trop volumineux (Maximum 10MB)",
+        message: "Fichier trop volumineux (Maximum 30MB)",
       })
     }
     request.log.error(err)
@@ -761,7 +761,7 @@ export const uploadPhotoCover = async (request, reply) => {
     part.file.on("limit", () => {
       return reply.code(413).send({
         success: false,
-        message: "Fichier trop volumineux (Maximum 10MB)",
+        message: "Fichier trop volumineux (Maximum 30MB)",
       })
     })
 
@@ -886,7 +886,7 @@ export const uploadPhotoCover = async (request, reply) => {
     if (err.code === "FST_REQ_FILE_TOO_LARGE") {
       return reply.code(413).send({
         success: false,
-        message: "Fichier trop volumineux (Maximum 10MB)",
+        message: "Fichier trop volumineux (Maximum 30MB)",
       })
     }
     request.log.error(err)

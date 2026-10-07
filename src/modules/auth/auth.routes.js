@@ -1,5 +1,7 @@
 import {
   googleCallback,
+  startMobileGoogleSignIn,
+  exchangeMobileGoogleCode,
   signIn,
   signUp,
   verifyEmail,
@@ -53,5 +55,7 @@ export default function authRoutes(fastify) {
   fastify.post("/verify-email", verifyEmail)
 
   registerGoogleOAuth(fastify)
+  fastify.get("/google/mobile/start", startMobileGoogleSignIn)
+  fastify.post("/google/mobile/exchange", exchangeMobileGoogleCode)
   fastify.get("/google/callback", googleCallback)
 }
