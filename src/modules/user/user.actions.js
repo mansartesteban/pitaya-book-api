@@ -11,6 +11,7 @@ export const getUser = async (request, reply) => {
         lastname: users.lastname,
         email: users.email,
         emailConfirmed: users.emailConfirmed,
+        avatar: users.avatar,
       })
       .from(users)
       .where(eq(users.id, request.user.id))
@@ -40,6 +41,7 @@ export const getAllUsers = async (request, reply) => {
         lastname: users.lastname,
         email: users.email,
         emailConfirmed: users.emailConfirmed,
+        avatar: users.avatar,
       })
       .from(users)
 

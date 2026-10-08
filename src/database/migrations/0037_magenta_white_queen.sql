@@ -1,0 +1,2 @@
+ALTER TABLE "pitaya"."users" ADD COLUMN "public_gallery_notifications_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "pitaya"."companies" ADD COLUMN "kind" text DEFAULT 'PROFESSIONAL' NOT NULL;

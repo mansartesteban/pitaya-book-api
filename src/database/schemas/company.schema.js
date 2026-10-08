@@ -5,6 +5,7 @@ import { users } from "../schema.js"
 export const companies = pitaya.table("companies", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  kind: text("kind").default("PROFESSIONAL").notNull(),
   legalName: text("legal_name"),
   location: jsonb("location"),
   siret: text("siret"),

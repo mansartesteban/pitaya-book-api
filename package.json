@@ -29,6 +29,7 @@
     "drizzle-orm": "^0.45.1",
     "fastify": "^5.3.3",
     "fastify-plugin": "^5.0.1",
+    "htmlparser2": "^8.0.2",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
     "nodemailer": "^8.0.3",

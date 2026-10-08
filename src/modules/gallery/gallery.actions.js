@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
 import { slugBase } from "./gallerySlug.js"
 import { defaultGalleryReminders } from "./defaultGalleryReminders.js"
+import { notifyPublicGalleryPublished } from "../notifications/galleryPublication.js"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -54,6 +55,8 @@ export const getAllGalleries = async (request, reply) => {
         description: galleries.description,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        allowReactions: galleries.allowReactions,
+        allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
         clientCompanyId: galleries.clientCompanyId,
         serviceId: galleries.serviceId,
@@ -196,6 +199,8 @@ export const getOneGallery = async (request, reply) => {
         password: galleries.password,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        allowReactions: galleries.allowReactions,
+        allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
         clientCompanyId: galleries.clientCompanyId,
         serviceId: galleries.serviceId,
@@ -375,6 +380,8 @@ export const createGallery = async (request, reply) => {
           title: request.validated.body.title,
           visibility,
           downloadable: request.validated.body.downloadable === true,
+          allowReactions: request.validated.body.allowReactions !== false,
+          allowComments: request.validated.body.allowComments !== false,
           expiresAt,
           clientCompanyId,
           password: visibility === "PRIVATE" ? request.validated.body.password : null,
@@ -410,6 +417,11 @@ export const createGallery = async (request, reply) => {
       return created
     })
 
+    if (visibility === "PUBLIC") {
+      try { await notifyPublicGalleryPublished(createdGallery.id) }
+      catch (error) { request.log.error(error, "Notification de publication impossible") }
+    }
+
     return reply
       .code(201)
       .send({ success: true, data: createdGallery, message: "Galerie créée" })
@@ -427,6 +439,8 @@ export const updateGallery = async (request, reply) => {
       title,
       visibility,
       downloadable,
+      allowReactions,
+      allowComments,
       expiresAt,
       description,
       password,
@@ -478,6 +492,8 @@ export const updateGallery = async (request, reply) => {
         ...(downloadable !== undefined
           ? { downloadable: downloadable === true }
           : {}),
+        ...(allowReactions !== undefined ? { allowReactions: allowReactions === true } : {}),
+        ...(allowComments !== undefined ? { allowComments: allowComments === true } : {}),
         ...(expiresAt !== undefined ? { expiresAt: nextExpiration } : {}),
         ...(clientCompanyId !== undefined ? { clientCompanyId } : {}),
         ...(expirationChanged || visibilityChanged ? { expirationApplied: false } : {}),
@@ -495,11 +511,18 @@ export const updateGallery = async (request, reply) => {
         title: galleries.title,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        allowReactions: galleries.allowReactions,
+        allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
         clientCompanyId: galleries.clientCompanyId,
         password: galleries.password,
         description: galleries.description,
       })
+
+    if (updatedGallery && visibilityChanged && visibilities[visibility] === "PUBLIC") {
+      try { await notifyPublicGalleryPublished(request.validated.params.galleryId) }
+      catch (error) { request.log.error(error, "Notification de publication impossible") }
+    }
 
     return reply.code(200).send({
       success: true,
@@ -538,6 +561,23 @@ export const updateGalleryDownloadable = async (request, reply) => {
       success: false,
       message: "Impossible de modifier le téléchargement de la galerie",
     })
+  }
+}
+export const updateGalleryInteractions = async (request, reply) => {
+  try {
+    const [updatedGallery] = await db.update(galleries).set({
+      allowReactions: request.validated.body.allowReactions,
+      allowComments: request.validated.body.allowComments,
+    }).where(and(
+      eq(galleries.id, request.validated.params.galleryId),
+      eq(galleries.ownerUserId, request.user.id),
+      isNull(galleries.parentGallery),
+    )).returning({ allowReactions: galleries.allowReactions, allowComments: galleries.allowComments })
+    if (!updatedGallery) return reply.code(404).send({ success: false, message: "Galerie principale introuvable" })
+    return reply.send({ success: true, data: updatedGallery })
+  } catch (err) {
+    request.log.error(err)
+    return reply.code(500).send({ success: false, message: "Impossible de modifier les interactions de la galerie" })
   }
 }
 export const addParentGallery = async (request, reply) => {

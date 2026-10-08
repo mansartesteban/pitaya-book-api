@@ -1,0 +1,2 @@
+ALTER TABLE "pitaya"."galleries" ADD COLUMN "allow_reactions" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "pitaya"."galleries" ADD COLUMN "allow_comments" boolean DEFAULT true NOT NULL;

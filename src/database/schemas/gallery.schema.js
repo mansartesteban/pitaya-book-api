@@ -19,6 +19,8 @@ export const galleries = pitaya.table("galleries", {
   description: text("description"),
   visibility: galleryVisibility("visibility").notNull(),
   downloadable: boolean("downloadable").default(false).notNull(),
+  allowReactions: boolean("allow_reactions").default(true).notNull(),
+  allowComments: boolean("allow_comments").default(true).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   expirationApplied: boolean("expiration_applied").default(false).notNull(),
   reminderDays: integer("reminder_days").default(7).notNull(),

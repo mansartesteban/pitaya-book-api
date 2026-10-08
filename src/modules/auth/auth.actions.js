@@ -6,10 +6,12 @@ import {
 } from "./auth.service.js"
 import { and, desc, eq, gt } from "drizzle-orm"
 import { db } from "../../database/index.js"
-import { users, emailTokens, mobileLoginCodes } from "../../database/schema.js"
+import { users, emailTokens, mobileLoginCodes, galleryInteractions } from "../../database/schema.js"
 import bcrypt from "bcrypt"
 import jwt from "jsonwebtoken"
 import crypto from "node:crypto"
+import { notifyReply } from "../public/interactions/interaction.routes.js"
+import { notifyAdminsOfNewUser } from "../notifications/accountNotifications.js"
 
 const mobileCodeHash = (value) => crypto.createHash("sha256").update(value).digest("hex")
 const mobileChallenge = (value) => crypto.createHash("sha256").update(value).digest("base64url")
@@ -131,7 +133,11 @@ export const signUp = async (request, reply) => {
         email: users.email,
         role: users.role,
         firstname: users.firstname,
+        lastname: users.lastname,
       })
+
+    try { await notifyAdminsOfNewUser(insertedUser) }
+    catch (error) { request.log.error(error, "Notification d'inscription impossible") }
 
     const expiresInMs = 24 * 60 * 60 * 1000
     const expiresAt = new Date(Date.now() + expiresInMs)
@@ -361,6 +367,34 @@ export const verifyEmail = async (request, reply) => {
       })
     }
 
+    if (payload.type === "guest_interaction_verification") {
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex")
+      const [confirmed] = await db.update(galleryInteractions).set({
+        status: "PUBLISHED", confirmedAt: new Date(),
+        verificationTokenHash: null, verificationExpiresAt: null,
+      }).where(and(
+        eq(galleryInteractions.id, payload.interactionId),
+        eq(galleryInteractions.guestEmail, payload.email),
+        eq(galleryInteractions.verificationTokenHash, tokenHash),
+        eq(galleryInteractions.status, "PENDING"),
+        gt(galleryInteractions.verificationExpiresAt, new Date()),
+      )).returning({ id: galleryInteractions.id, galleryId: galleryInteractions.galleryId,
+        email: galleryInteractions.guestEmail, name: galleryInteractions.guestName })
+      if (!confirmed) return reply.code(410).send({ success: false, message: "Ce lien n'est plus valide" })
+      const published = await db.update(galleryInteractions).set({ status: "PUBLISHED", confirmedAt: new Date(),
+        verificationExpiresAt: null }).where(and(eq(galleryInteractions.guestEmail, confirmed.email),
+        eq(galleryInteractions.status, "PENDING"), gt(galleryInteractions.verificationExpiresAt, new Date())))
+        .returning({ id: galleryInteractions.id })
+      for (const item of [confirmed, ...published]) await notifyReply(item.id)
+      const guestSession = await reply.jwtSign({ type: "guest_interaction_session",
+        email: confirmed.email, name: confirmed.name }, { expiresIn: "30d" })
+      reply.setCookie("guest_interaction_session", guestSession, {
+        httpOnly: true, secure: process.env.NODE_ENV === "production",
+        sameSite: "lax", path: "/", maxAge: 30 * 24 * 60 * 60,
+      })
+      return reply.send({ success: true, message: "Votre adresse e-mail est vérifiée et votre contribution est publiée",
+        data: { guest: true, galleryId: confirmed.galleryId, email: confirmed.email, name: confirmed.name } })
+    }
     if (payload.type !== "email_verification") {
       return reply
         .code(401)
@@ -430,6 +464,24 @@ export const verifyEmail = async (request, reply) => {
   }
 }
 
+export const getGuestInteractionSession = async (request, reply) => {
+  try {
+    const token = request.cookies?.guest_interaction_session
+    if (!token) return reply.send({ success: true, data: { verified: false } })
+    const payload = jwt.verify(token, process.env.JWT_SECRET)
+    if (payload.type !== "guest_interaction_session" || !payload.email) throw new Error("Invalid guest session")
+    return reply.send({ success: true, data: { verified: true, email: payload.email, name: payload.name || "" } })
+  } catch {
+    reply.clearCookie("guest_interaction_session", { path: "/" })
+    return reply.send({ success: true, data: { verified: false } })
+  }
+}
+
+export const clearGuestInteractionSession = async (_request, reply) => {
+  reply.clearCookie("guest_interaction_session", { path: "/" })
+  return reply.code(204).send()
+}
+
 export const googleCallback = async (request, reply) => {
   try {
     // Récupérer le token OAuth
@@ -446,7 +498,21 @@ export const googleCallback = async (request, reply) => {
     }
 
     // Trouver ou créer l'utilisateur
-    const user = await findOrCreateGoogleUser(googleUserInfo)
+    const { user, created } = await findOrCreateGoogleUser(googleUserInfo)
+    if (created) {
+      try { await notifyAdminsOfNewUser(user) }
+      catch (error) { request.log.error(error, "Notification d'inscription Google impossible") }
+      const verificationToken = await reply.jwtSign({
+        id: user.id, email: user.email, type: "email_verification",
+      }, { expiresIn: "24h" })
+      await db.insert(emailTokens).values({
+        userId: user.id, type: "email_verification", token: verificationToken,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      })
+      const verificationUrl = `${process.env.FRONTEND_URL}/authentication/verify-email?token=${verificationToken}`
+      try { await sendVerificationMail(user, verificationUrl) }
+      catch (error) { request.log.error(error, "Le courriel de vérification Google n'a pas pu être envoyé") }
+    }
 
 
     const mobileFlow = request.cookies.mobile_google_flow

@@ -14,6 +14,8 @@ export const galleryInteractions = pitaya.table("gallery_interactions", {
   kind: text("kind").notNull(),
   content: text("content"),
   reaction: text("reaction"),
+  parentCommentId: uuid("parent_comment_id"),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
   status: text("status").default("PENDING").notNull(),
   verificationTokenHash: text("verification_token_hash"),
   verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }),

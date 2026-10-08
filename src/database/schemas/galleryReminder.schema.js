@@ -26,6 +26,8 @@ export const adminNotifications = pitaya.table("admin_notifications", {
   id: uuid("id").defaultRandom().primaryKey(),
   ownerUserId: uuid("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   galleryId: uuid("gallery_id").references(() => galleries.id, { onDelete: "cascade" }),
+  photoId: uuid("photo_id"),
+  commentId: uuid("comment_id"),
   kind: text("kind").notNull(),
   title: text("title").notNull(),
   body: text("body").notNull(),

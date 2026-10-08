@@ -1,6 +1,7 @@
 import {
   updateGallery,
   updateGalleryDownloadable,
+  updateGalleryInteractions,
   getAllGalleries,
   getOneGallery,
   createGallery,
@@ -31,6 +32,7 @@ import {
   removeParentGalleryValidator,
   updateGalleryValidator,
   updateGalleryDownloadableValidator,
+  updateGalleryInteractionsValidator,
   updatePhotoValidator,
   uploadPhotoCoverValidator,
   setPhotoCoverValidator,
@@ -39,7 +41,9 @@ import {
 import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
 import { applyGalleryExpirations } from "./galleryExpiration.js"
 import { listGalleryReminders, createGalleryReminder, updateGalleryReminder, deleteGalleryReminder, listGalleryReminderDeliveries, retryGalleryReminderDelivery } from "./galleryReminderSettings.js"
-import { listGalleryManagers, replaceGalleryManagers } from "./galleryManagers.js"
+import { listGalleryManagers, replaceGalleryManagers, listGalleryUserManagers, addGalleryUserManager, removeGalleryUserManager,
+  searchGalleryManagerCandidates, listUnifiedGalleryManagers, addUnifiedGalleryManager, removeUnifiedGalleryManager,
+  resendGalleryManagerInvitation } from "./galleryManagers.js"
 
 export default function galleryRoutes(fastify) {
   fastify.addHook("preHandler", authenticationMiddleware)
@@ -47,6 +51,14 @@ export default function galleryRoutes(fastify) {
   fastify.addHook("preHandler", applyGalleryExpirations)
   fastify.get("/:galleryId/managers", listGalleryManagers)
   fastify.put("/:galleryId/managers", replaceGalleryManagers)
+  fastify.get("/:galleryId/user-managers", listGalleryUserManagers)
+  fastify.post("/:galleryId/user-managers", addGalleryUserManager)
+  fastify.delete("/:galleryId/user-managers/:userId", removeGalleryUserManager)
+  fastify.get("/:galleryId/manager-candidates", searchGalleryManagerCandidates)
+  fastify.get("/:galleryId/manager-access", listUnifiedGalleryManagers)
+  fastify.post("/:galleryId/manager-access", addUnifiedGalleryManager)
+  fastify.delete("/:galleryId/manager-access/:type/:id", removeUnifiedGalleryManager)
+  fastify.post("/:galleryId/manager-access/:id/resend", resendGalleryManagerInvitation)
   fastify.get("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, listGalleryReminders)
   fastify.post("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, createGalleryReminder)
   fastify.put("/:galleryId/reminders/:reminderId", { preHandler: [authenticationMiddleware] }, updateGalleryReminder)
@@ -95,6 +107,9 @@ export default function galleryRoutes(fastify) {
     },
     updateGalleryDownloadable
   )
+  fastify.patch("/:galleryId/interactions", {
+    preHandler: [authenticationMiddleware, updateGalleryInteractionsValidator],
+  }, updateGalleryInteractions)
   fastify.put(
     "/:galleryId/parent-gallery",
     {

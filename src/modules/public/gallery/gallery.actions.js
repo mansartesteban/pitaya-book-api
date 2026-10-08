@@ -1,5 +1,5 @@
 import { db } from "../../../database/index.js"
-import { galleries, photos } from "../../../database/schema.js"
+import { galleries, photos, users } from "../../../database/schema.js"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
 import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
@@ -40,6 +40,22 @@ export const getAncestorAccess = async (gallery, request) => {
     parentId = parent.parentGallery
   }
   return { blocked: false, unlisted }
+}
+
+// The oldest parent owns the interaction settings for the entire branch.
+export const getInteractionSettings = async (gallery) => {
+  let current = gallery
+  const visited = new Set()
+  while (current?.parentGallery) {
+    if (visited.has(current.id)) return { allowReactions: false, allowComments: false }
+    visited.add(current.id)
+    const [parent] = await db.select({ id: galleries.id, parentGallery: galleries.parentGallery,
+      allowReactions: galleries.allowReactions, allowComments: galleries.allowComments })
+      .from(galleries).where(eq(galleries.id, current.parentGallery))
+    if (!parent) return { allowReactions: false, allowComments: false }
+    current = parent
+  }
+  return { allowReactions: current.allowReactions, allowComments: current.allowComments }
 }
 
 export const getAllGalleries = async (request, reply) => {
@@ -197,6 +213,8 @@ export const getGallery = async (request, reply) => {
       parentGallery: galleries.parentGallery,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      allowReactions: galleries.allowReactions,
+      allowComments: galleries.allowComments,
       coverPhotoId: galleries.coverPhotoId,
     }
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(galleryId)
@@ -227,6 +245,7 @@ export const getGallery = async (request, reply) => {
     if (ancestorAccess.unlisted && foundGallery.visibility === "PUBLIC") {
       foundGallery.visibility = "UNLISTED"
     }
+    Object.assign(foundGallery, await getInteractionSettings(foundGallery))
 
     if (foundGallery.visibility === "PRIVATE") {
       if (!isGalleryUnlocked(foundGallery, request)) {
@@ -261,6 +280,8 @@ export const getPrivateGallery = async (request, reply) => {
         password: galleries.password,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        allowReactions: galleries.allowReactions,
+        allowComments: galleries.allowComments,
         coverPhotoId: galleries.coverPhotoId,
         parentGallery: galleries.parentGallery,
       })
@@ -282,6 +303,7 @@ export const getPrivateGallery = async (request, reply) => {
     if (ancestorAccess.unlisted && foundGallery.visibility === "PUBLIC") {
       foundGallery.visibility = "UNLISTED"
     }
+    Object.assign(foundGallery, await getInteractionSettings(foundGallery))
 
     if (foundGallery.visibility === "PRIVATE") {
       if (!foundGallery.password) {
@@ -324,6 +346,11 @@ const getPublicGallery = async (gallery, request, reply) => {
       .code(404)
       .send({ success: false, message: "Aucune galerie trouvée" })
   }
+
+  const [owner] = await db.select({ firstname: users.firstname, lastname: users.lastname, avatar: users.avatar })
+    .from(galleries).innerJoin(users, eq(galleries.ownerUserId, users.id))
+    .where(eq(galleries.id, gallery.id))
+  gallery.author = owner ? { name: `${owner.firstname || ""} ${owner.lastname || ""}`.trim() || "Pitaya Photo", avatar: owner.avatar } : { name: "Pitaya Photo", avatar: null }
 
   const childrenGalleries = await db
     .select({
@@ -380,7 +407,7 @@ const getPublicGallery = async (gallery, request, reply) => {
               eq(galleries.visibility, "PUBLIC")
             )
           )
-        if (subsubGalleries) {
+        if (subsubGalleries.length) {
           const foundSubPhotos = await db
             .select({
               id: photos.id,
@@ -411,10 +438,10 @@ const getPublicGallery = async (gallery, request, reply) => {
       }
     }
     gallery.children = childrenGalleries.filter(
-      (child) => child.photos.length >= 3
+      (child) => Boolean(child.coverPhoto || child.photos.length)
     )
-  } else {
-    const foundPhotos = await db
+  }
+  const foundPhotos = await db
       .select({
         id: photos.id,
         width: photos.width,
@@ -429,15 +456,14 @@ const getPublicGallery = async (gallery, request, reply) => {
         and(eq(photos.galleryId, gallery.id), eq(photos.isCoverPhoto, false), eq(photos.isHidden, false))
       )
 
-    gallery.photos = foundPhotos.map((photo) => {
-      photo.urls = {
-        300: signPhotoUrl(photo, true, 300),
-        600: signPhotoUrl(photo, true, 600),
-        original: signPhotoUrl(photo, true),
-      }
-      return photo
-    })
-  }
+  gallery.photos = foundPhotos.map((photo) => {
+    photo.urls = {
+      300: signPhotoUrl(photo, true, 300),
+      600: signPhotoUrl(photo, true, 600),
+      original: signPhotoUrl(photo, true),
+    }
+    return photo
+  })
 
   let current = gallery
 

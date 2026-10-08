@@ -1,5 +1,5 @@
 import { db } from "../../database/index.js"
-import { companies, companyContacts, galleries, photos } from "../../database/schema.js"
+import { companies, companyContacts, galleries, photos, users } from "../../database/schema.js"
 import { and, eq, isNull, or, sql } from "drizzle-orm"
 
 const companyAccess = (request) => or(
@@ -19,13 +19,14 @@ export const getAllCompanies = async (request, reply) => {
       .select({
         id: companies.id,
         name: companies.name,
+        kind: companies.kind,
         legalName: companies.legalName,
         siret: companies.siret,
         location: companies.location,
         vatNumber: companies.vatNumber,
       })
       .from(companies)
-      .where(companyAccess(request))
+      .where(and(companyAccess(request), eq(companies.kind, "PROFESSIONAL")))
     return reply.code(200).send({ success: true, data: results })
   } catch (err) {
     request.log.error(err)
@@ -34,6 +35,59 @@ export const getAllCompanies = async (request, reply) => {
       message: "Erreur lors de la récupération des sociétés",
     })
   }
+}
+
+export const getAllClients = async (request, reply) => {
+  const data = await db.select({ id: companies.id, name: companies.name, kind: companies.kind })
+    .from(companies).where(companyAccess(request))
+  return reply.send({ success: true, data })
+}
+
+export const listIndividuals = async (request, reply) => {
+  const data = await db.select({ id: companies.id, name: companies.name,
+    firstname: companyContacts.firstname, lastname: companyContacts.lastname,
+    email: companyContacts.email, phone: companyContacts.phone, avatar: users.avatar })
+    .from(companies).innerJoin(companyContacts, eq(companyContacts.companyId, companies.id))
+    .leftJoin(users, eq(users.email, companyContacts.email))
+    .where(and(companyAccess(request), eq(companies.kind, "INDIVIDUAL")))
+  return reply.send({ success: true, data })
+}
+
+export const createIndividual = async (request, reply) => {
+  const { firstname, lastname, email, phone } = request.body ?? {}
+  if (!firstname?.trim() || !lastname?.trim() || email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return reply.code(400).send({ success: false, message: "Prénom, nom et adresse e-mail valides requis" })
+  }
+  const data = await db.transaction(async (tx) => {
+    const [client] = await tx.insert(companies).values({ name: `${firstname.trim()} ${lastname.trim()}`, kind: "INDIVIDUAL", userId: request.user.id }).returning({ id: companies.id, name: companies.name })
+    await tx.insert(companyContacts).values({ companyId: client.id, firstname: firstname.trim(), lastname: lastname.trim(),
+      email: email?.trim().toLowerCase() || null, phone: phone?.trim() || null })
+    return client
+  })
+  return reply.code(201).send({ success: true, data })
+}
+
+export const updateIndividual = async (request, reply) => {
+  const { clientId } = request.params
+  const { firstname, lastname, email, phone } = request.body ?? {}
+  if (!firstname?.trim() || !lastname?.trim() || email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return reply.code(400).send({ success: false, message: "Informations invalides" })
+  }
+  const [client] = await db.select({ id: companies.id }).from(companies)
+    .where(and(eq(companies.id, clientId), eq(companies.kind, "INDIVIDUAL"), companyAccess(request)))
+  if (!client) return reply.code(404).send({ success: false, message: "Client introuvable" })
+  await db.transaction(async (tx) => {
+    await tx.update(companies).set({ name: `${firstname.trim()} ${lastname.trim()}` }).where(eq(companies.id, clientId))
+    await tx.update(companyContacts).set({ firstname: firstname.trim(), lastname: lastname.trim(),
+      email: email?.trim().toLowerCase() || null, phone: phone?.trim() || null }).where(eq(companyContacts.companyId, clientId))
+  })
+  return reply.send({ success: true })
+}
+
+export const deleteIndividual = async (request, reply) => {
+  const [removed] = await db.delete(companies).where(and(eq(companies.id, request.params.clientId),
+    eq(companies.kind, "INDIVIDUAL"), companyAccess(request))).returning({ id: companies.id })
+  return removed ? reply.send({ success: true }) : reply.code(404).send({ success: false, message: "Client introuvable" })
 }
 
 export const createCompany = async (request, reply) => {
@@ -167,8 +221,9 @@ export const listCompanyContacts = async (request, reply) => {
     lastname: companyContacts.lastname,
     email: companyContacts.email,
     phone: companyContacts.phone,
+    avatar: users.avatar,
     remindersEnabled: companyContacts.remindersEnabled,
-  }).from(companyContacts).where(eq(companyContacts.companyId, companyId))
+  }).from(companyContacts).leftJoin(users, eq(users.email, companyContacts.email)).where(eq(companyContacts.companyId, companyId))
   return reply.send({ success: true, data })
 }
 

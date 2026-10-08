@@ -29,6 +29,8 @@ export const users = pitaya.table("users", {
   email: text("email").notNull().unique(),
   emailConfirmed: boolean("email_confirmed").default(false),
   phone: text("phone").default(""),
+  avatar: text("avatar"),
+  publicGalleryNotificationsEnabled: boolean("public_gallery_notifications_enabled").default(true).notNull(),
   role: roles("role").default("USER"),
 
   // Auth

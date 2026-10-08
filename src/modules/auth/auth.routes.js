@@ -9,6 +9,8 @@ import {
   resetPassword,
   signOut,
   resendVerification,
+  getGuestInteractionSession,
+  clearGuestInteractionSession,
 } from "./auth.actions.js"
 import {
   signInFormValidator,
@@ -54,6 +56,8 @@ export default function authRoutes(fastify) {
     resetPassword
   )
   fastify.post("/verify-email", verifyEmail)
+  fastify.get("/guest-session", getGuestInteractionSession)
+  fastify.delete("/guest-session", clearGuestInteractionSession)
   fastify.post("/resend-verification", { preHandler: [authenticationMiddleware] }, resendVerification)
 
   registerGoogleOAuth(fastify)

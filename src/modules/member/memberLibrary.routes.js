@@ -30,8 +30,11 @@ export default function memberLibraryRoutes(fastify) {
   fastify.addHook("preHandler", verified)
 
   fastify.get("/", async (request, reply) => {
+    const requestedPhotoId = request.query?.photoId
+    if (requestedPhotoId && !uuid.test(requestedPhotoId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
     const [galleryRows, photoRows, selections] = await Promise.all([
-      db.select({ id: favoriteGalleries.galleryId, title: galleries.title, slug: galleries.slug })
+      db.select({ id: favoriteGalleries.galleryId, title: galleries.title, slug: galleries.slug,
+        createdAt: galleries.createdAt, coverPhotoId: galleries.coverPhotoId })
         .from(favoriteGalleries).innerJoin(galleries, eq(favoriteGalleries.galleryId, galleries.id))
         .where(eq(favoriteGalleries.userId, request.user.id)),
       db.select({ id: favoritePhotos.photoId }).from(favoritePhotos).where(eq(favoritePhotos.userId, request.user.id)),
@@ -39,11 +42,35 @@ export default function memberLibraryRoutes(fastify) {
         .from(photoSelections).where(eq(photoSelections.userId, request.user.id)),
     ])
     const visibleGalleries = []
-    for (const gallery of galleryRows) if (await visibleTarget(request, gallery.id, null)) visibleGalleries.push(gallery)
+    for (const gallery of galleryRows) {
+      if (!await visibleTarget(request, gallery.id, null)) continue
+      const galleryPhotos = await db.select({ id: photos.id, galleryId: photos.galleryId, extension: photos.extension,
+        isHidden: photos.isHidden }).from(photos).where(eq(photos.galleryId, gallery.id))
+      const visible = galleryPhotos.filter((photo) => !photo.isHidden)
+      const cover = visible.find((photo) => photo.id === gallery.coverPhotoId) || visible[0]
+      visibleGalleries.push({ id: gallery.id, title: gallery.title, slug: gallery.slug,
+        createdAt: gallery.createdAt, photoCount: visible.length,
+        thumbnailUrl: cover ? signPhotoUrl(cover, true, 300) : null })
+    }
     const visiblePhotos = []
     for (const photo of photoRows) {
       const accessible = await accessiblePhoto(request, photo.id)
       if (accessible) visiblePhotos.push(accessible)
+    }
+    for (const selection of selections) {
+      const items = await db.select({ photoId: photoSelectionItems.photoId }).from(photoSelectionItems)
+        .where(eq(photoSelectionItems.selectionId, selection.id))
+      let count = 0
+      let thumbnailUrl = null
+      for (const item of items) {
+        const photo = await accessiblePhoto(request, item.photoId)
+        if (!photo) continue
+        count++
+        thumbnailUrl ||= photo.thumbnailUrl
+      }
+      selection.photoCount = count
+      selection.thumbnailUrl = thumbnailUrl
+      if (requestedPhotoId) selection.containsPhoto = items.some((item) => item.photoId === requestedPhotoId)
     }
     return reply.send({ success: true, data: { galleries: visibleGalleries, photos: visiblePhotos, selections } })
   })

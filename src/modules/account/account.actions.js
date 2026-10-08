@@ -3,6 +3,7 @@ import { emailTokens, galleries, users } from "../../database/schema.js"
 import { eq } from "drizzle-orm"
 import bcrypt from "bcrypt"
 import { sendVerificationMail } from "../auth/auth.service.js"
+import { avatarPathFromUrl, removeAvatar } from "./avatarStorage.js"
 
 export const getProfile = async (request, reply) => {
   try {
@@ -13,6 +14,7 @@ export const getProfile = async (request, reply) => {
         lastname: users.lastname,
         email: users.email,
         phone: users.phone,
+        avatar: users.avatar,
       })
       .from(users)
       .where(eq(users.id, request.user.id))
@@ -187,12 +189,14 @@ export const updatePassword = async (request, reply) => {
 }
 
 export const deleteAccount = async (request, reply) => {
-  const [account] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, request.user.id))
+  const [account] = await db.select({ id: users.id, role: users.role, avatar: users.avatar }).from(users).where(eq(users.id, request.user.id))
   if (!account) return reply.code(404).send({ success: false, message: "Compte introuvable" })
   if (["ADMIN", "SUPERADMIN"].includes(account.role)) return reply.code(403).send({ success: false, message: "Compte administrateur non supprimable ici" })
   const [ownedGallery] = await db.select({ id: galleries.id }).from(galleries).where(eq(galleries.ownerUserId, account.id)).limit(1)
   if (ownedGallery) return reply.code(409).send({ success: false, message: "Ce compte possède une galerie" })
   await db.delete(users).where(eq(users.id, account.id))
+  const avatarPath = avatarPathFromUrl(account.avatar)
+  if (avatarPath) removeAvatar(avatarPath).catch((error) => request.log.error(error))
   reply.clearCookie("access_token", { path: "/" })
   return reply.code(204).send()
 }

@@ -1,8 +1,12 @@
 import { db } from "../../database/index.js"
 import { users } from "../../database/schema.js"
 import nodemailer from "nodemailer"
+import { eq } from "drizzle-orm"
 
-const mailTemplates = (user, verificationUrl) => [
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character])
+
+const mailTemplates = (user, verificationUrl, options = {}) => [
   `<!DOCTYPE html>
 <html lang="fr">
   <head>
@@ -56,26 +60,28 @@ const mailTemplates = (user, verificationUrl) => [
   <body>
     <div class="container">
       <div class="header">
-        <h1>Confirmez votre adresse email</h1>
+        <h1>${options.galleryInvitation ? "Une galerie à gérer vous attend" : options.guestInteraction ? "Confirmez votre contribution" : "Confirmez votre adresse email"}</h1>
       </div>
 
       <div class="content">
-        <p>Bonjour${user.firstname ? ` ${user.firstname}` : ""},</p>
+        <p>Bonjour${user.firstname ? ` ${escapeHtml(user.firstname)}` : ""},</p>
 
         <p>
-          Merci pour votre inscription 🎉  
-          Pour activer votre compte, merci de confirmer votre adresse email
-          en cliquant sur le bouton ci-dessous.
+          ${options.galleryInvitation
+            ? `Pitaya Photo vous propose de gérer la galerie « ${escapeHtml(options.galleryTitle)} ». Créez un compte avec cette adresse e-mail, puis confirmez-la pour accéder à la galerie depuis « Mes galeries ».`
+            : options.guestInteraction
+            ? "Pour publier votre réaction ou votre commentaire, confirmez votre adresse e-mail en cliquant sur le bouton ci-dessous. Vous pourrez ensuite contribuer pendant trente jours sans recevoir un nouveau courriel à chaque fois."
+            : "Merci pour votre inscription 🎉 Pour activer votre compte, confirmez votre adresse e-mail en cliquant sur le bouton ci-dessous."}
         </p>
 
         <p style="text-align: center">
-          <a href="${verificationUrl}" class="button">
-            Vérifier mon email
+          <a href="${escapeHtml(verificationUrl)}" class="button">
+            ${options.galleryInvitation ? "Créer mon compte" : options.guestInteraction ? "Confirmer ma contribution" : "Vérifier mon email"}
           </a>
         </p>
 
         <p>
-          Ce lien est valable pour une durée limitée.  
+          ${options.galleryInvitation ? "L'invitation restera liée à cette adresse e-mail jusqu'à ce que le propriétaire la retire." : "Ce lien est valable pour une durée limitée."}
           Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer
           cet email.
         </p>
@@ -180,23 +186,24 @@ const mailTemplates = (user, verificationUrl) => [
 ]
 
 export async function findOrCreateGoogleUser(googleUserInfo) {
-  const [user] = await db
+  const email = googleUserInfo.email.trim().toLowerCase()
+  const [createdUser] = await db
     .insert(users)
     .values({
-      email: googleUserInfo.email.trim().toLowerCase(),
+      email,
       firstname: googleUserInfo.given_name ?? "",
       lastname: googleUserInfo.family_name ?? "",
       password: null,
-      emailConfirmed: true,
+      emailConfirmed: false,
       isActive: true,
     })
-    .onConflictDoUpdate({
-      target: users.email,
-      set: { lastLoginAt: new Date(), emailConfirmed: true },
-    })
+    .onConflictDoNothing({ target: users.email })
     .returning()
+  if (createdUser) return { user: createdUser, created: true }
 
-  return user
+  const [user] = await db.update(users).set({ lastLoginAt: new Date() })
+    .where(eq(users.email, email)).returning()
+  return { user, created: false }
 }
 
 export async function fetchGoogleUserInfo(accessToken) {
@@ -222,7 +229,7 @@ export async function fetchGoogleUserInfo(accessToken) {
 //   ]
 // }
 
-export async function sendVerificationMail(user, verificationUrl) {
+export async function sendVerificationMail(user, verificationUrl, options = {}) {
   const transport = nodemailer.createTransport({ host: process.env.SMTP_SERVER,
     port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
     auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
@@ -230,8 +237,10 @@ export async function sendVerificationMail(user, verificationUrl) {
     from: `Pitaya Photo <${process.env.SMTP_FROM || "noreply@pitaya-photo.com"}>`,
     replyTo: "esteban.mansart@gmail.com",
     to: user.email,
-    subject: "Vérification de votre compte Pitaya Photo",
-    html: mailTemplates(user, verificationUrl)[0],
+    subject: options.guestInteraction
+      ? "Confirmez votre contribution à une galerie Pitaya Photo"
+      : "Vérification de votre compte Pitaya Photo",
+    html: mailTemplates(user, verificationUrl, options)[0],
   })
 }
 
@@ -245,5 +254,18 @@ export async function sendResetMail(user, resetUrl) {
     to: user.email,
     subject: "Réinitialisation de votre mot de passe Pitaya Photo",
     html: mailTemplates(user, resetUrl)[1],
+  })
+}
+
+export async function sendGalleryManagementInvitation({ email, firstname, galleryTitle, signUpUrl }) {
+  const transport = nodemailer.createTransport({ host: process.env.SMTP_SERVER,
+    port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
+    auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
+  await transport.sendMail({
+    from: `Pitaya Photo <${process.env.SMTP_FROM || "noreply@pitaya-photo.com"}>`,
+    replyTo: "esteban.mansart@gmail.com",
+    to: email,
+    subject: `Invitation à gérer la galerie « ${galleryTitle} »`,
+    html: mailTemplates({ firstname }, signUpUrl, { galleryInvitation: true, galleryTitle })[0],
   })
 }
