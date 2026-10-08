@@ -39,6 +39,7 @@ import {
   uploadPhotoValidator,
 } from "./gallery.validators.js"
 import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares/authentication.js"
+import { saveCoverFraming } from "./galleryCoverFraming.js"
 import { applyGalleryExpirations } from "./galleryExpiration.js"
 import { listGalleryReminders, createGalleryReminder, updateGalleryReminder, deleteGalleryReminder, listGalleryReminderDeliveries, retryGalleryReminderDelivery } from "./galleryReminderSettings.js"
 import { listGalleryManagers, replaceGalleryManagers, listGalleryUserManagers, addGalleryUserManager, removeGalleryUserManager,
@@ -58,6 +59,7 @@ export default function galleryRoutes(fastify) {
   fastify.get("/:galleryId/manager-access", listUnifiedGalleryManagers)
   fastify.post("/:galleryId/manager-access", addUnifiedGalleryManager)
   fastify.delete("/:galleryId/manager-access/:type/:id", removeUnifiedGalleryManager)
+  fastify.patch("/:galleryId/cover-framing", saveCoverFraming)
   fastify.post("/:galleryId/manager-access/:id/resend", resendGalleryManagerInvitation)
   fastify.get("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, listGalleryReminders)
   fastify.post("/:galleryId/reminders", { preHandler: [authenticationMiddleware] }, createGalleryReminder)

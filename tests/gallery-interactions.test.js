@@ -126,11 +126,26 @@ test("confirmed comments can be moderated without exposing hidden comments", { s
     const photoComment = await app.inject({ method: "POST", url: `/api/public/interactions/${child.id}`,
       headers: { cookie }, payload: { kind: "COMMENT", photoId: childPhoto.id, content: "Child photo comment" } })
     assert.equal(photoComment.statusCode, 201, photoComment.body)
+    const expiration = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    await db.update(galleries).set({ expiresAt: expiration }).where(eq(galleries.id, gallery.id))
     const tree = await app.inject({ method: "GET", url: `/api/member/galleries/${gallery.id}/tree`, headers: { cookie: memberCookie } })
     assert.equal(tree.statusCode, 200, tree.body)
+    assert.equal(new Date(tree.json().data.expiresAt).getTime(), expiration.getTime())
+    const childTree = await app.inject({ method: "GET", url: `/api/member/galleries/${child.id}/tree`, headers: { cookie: memberCookie } })
+    assert.equal(new Date(childTree.json().data.expiresAt).getTime(), expiration.getTime())
     assert.equal(tree.json().data.children[0].id, child.id)
     assert.equal(tree.json().data.children[0].comments.some((item) => item.id === allowedComment.json().data.id), true)
     assert.equal(tree.json().data.children[0].photos[0].comments[0].id, photoComment.json().data.id)
+    const framing = { coverPositionX: 35, coverPositionY: 72, coverZoom: 125, coverContain: true }
+    const savedFraming = await app.inject({ method: "PATCH", url: `/api/member/galleries/${child.id}/cover-framing`,
+      headers: { cookie: memberCookie }, payload: framing })
+    assert.equal(savedFraming.statusCode, 200, savedFraming.body)
+    assert.deepEqual(savedFraming.json().data, framing)
+    const invalidFraming = await app.inject({ method: "PATCH", url: `/api/member/galleries/${child.id}/cover-framing`,
+      headers: { cookie: memberCookie }, payload: { ...framing, coverZoom: 300 } })
+    assert.equal(invalidFraming.statusCode, 400, invalidFraming.body)
+    const reframedTree = await app.inject({ method: "GET", url: `/api/member/galleries/${gallery.id}/tree`, headers: { cookie: memberCookie } })
+    assert.equal(reframedTree.json().data.children[0].coverPositionY, 72)
     const hideChildPhoto = await app.inject({ method: "PATCH", url: `/api/member/galleries/${child.id}/photos/${childPhoto.id}/visibility`,
       headers: { cookie: memberCookie }, payload: { hidden: true } })
     assert.equal(hideChildPhoto.statusCode, 200, hideChildPhoto.body)

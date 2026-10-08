@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."galleries" ADD COLUMN "cover_contain" boolean DEFAULT false NOT NULL;

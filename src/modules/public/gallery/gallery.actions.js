@@ -99,6 +99,10 @@ export const getAllGalleries = async (request, reply) => {
         createdAt: galleries.createdAt,
         title: galleries.title,
         coverPhotoId: galleries.coverPhotoId,
+        coverPositionX: galleries.coverPositionX,
+        coverPositionY: galleries.coverPositionY,
+        coverZoom: galleries.coverZoom,
+        coverContain: galleries.coverContain,
         description: galleries.description,
         visibility: galleries.visibility,
         photoCount: sql`count(${photos.id})`.as("photoCount"),
@@ -209,6 +213,8 @@ export const getGallery = async (request, reply) => {
       name: galleries.name,
       slug: galleries.slug,
       title: galleries.title,
+      createdAt: galleries.createdAt,
+      publishedAt: galleries.publishedAt,
       description: galleries.description,
       parentGallery: galleries.parentGallery,
       visibility: galleries.visibility,
@@ -216,6 +222,10 @@ export const getGallery = async (request, reply) => {
       allowReactions: galleries.allowReactions,
       allowComments: galleries.allowComments,
       coverPhotoId: galleries.coverPhotoId,
+      coverPositionX: galleries.coverPositionX,
+      coverPositionY: galleries.coverPositionY,
+      coverZoom: galleries.coverZoom,
+      coverContain: galleries.coverContain,
     }
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(galleryId)
     let [foundGallery] = isUuid ? await db
@@ -279,10 +289,16 @@ export const getPrivateGallery = async (request, reply) => {
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
+        createdAt: galleries.createdAt,
+        publishedAt: galleries.publishedAt,
         downloadable: galleries.downloadable,
         allowReactions: galleries.allowReactions,
         allowComments: galleries.allowComments,
         coverPhotoId: galleries.coverPhotoId,
+        coverPositionX: galleries.coverPositionX,
+        coverPositionY: galleries.coverPositionY,
+        coverZoom: galleries.coverZoom,
+        coverContain: galleries.coverContain,
         parentGallery: galleries.parentGallery,
       })
       .from(galleries)
@@ -473,8 +489,14 @@ const getPublicGallery = async (gallery, request, reply) => {
         id: galleries.id,
         parentGallery: galleries.parentGallery,
         coverPhotoId: galleries.coverPhotoId,
+        coverPositionX: galleries.coverPositionX,
+        coverPositionY: galleries.coverPositionY,
+        coverZoom: galleries.coverZoom,
+        coverContain: galleries.coverContain,
         description: galleries.description,
         title: galleries.title,
+        createdAt: galleries.createdAt,
+        publishedAt: galleries.publishedAt,
       })
       .from(galleries)
       .where(eq(galleries.id, current.parentGallery))
@@ -487,6 +509,12 @@ const getPublicGallery = async (gallery, request, reply) => {
   let rootGallery = current
 
   const coverPhotoId = gallery.coverPhotoId || rootGallery.coverPhotoId
+  if (!gallery.coverPhotoId && gallery.id !== rootGallery.id) {
+    gallery.coverPositionX = rootGallery.coverPositionX
+    gallery.coverPositionY = rootGallery.coverPositionY
+    gallery.coverZoom = rootGallery.coverZoom
+    gallery.coverContain = rootGallery.coverContain
+  }
   const coverGalleryId = gallery.coverPhotoId ? gallery.id : rootGallery.id
   const [coverPhoto] = coverPhotoId ? await db
     .select({
@@ -517,6 +545,8 @@ const getPublicGallery = async (gallery, request, reply) => {
   if (gallery.id !== rootGallery.id) {
     gallery.subtitle = gallery.title
     gallery.title = rootGallery.title
+    gallery.createdAt = rootGallery.createdAt
+    gallery.publishedAt = rootGallery.publishedAt
   }
 
   return reply.code(200).send({ success: true, data: gallery })

@@ -195,6 +195,10 @@ export const getOneGallery = async (request, reply) => {
         slug: galleries.slug,
         title: galleries.title,
         coverPhotoId: galleries.coverPhotoId,
+        coverPositionX: galleries.coverPositionX,
+        coverPositionY: galleries.coverPositionY,
+        coverZoom: galleries.coverZoom,
+        coverContain: galleries.coverContain,
         description: galleries.description,
         password: galleries.password,
         visibility: galleries.visibility,
@@ -379,6 +383,7 @@ export const createGallery = async (request, reply) => {
           slug,
           title: request.validated.body.title,
           visibility,
+          publishedAt: visibility === "PUBLIC" ? createdAt : null,
           downloadable: request.validated.body.downloadable === true,
           allowReactions: request.validated.body.allowReactions !== false,
           allowComments: request.validated.body.allowComments !== false,
@@ -489,6 +494,7 @@ export const updateGallery = async (request, reply) => {
         name: name,
         title: title,
         visibility: visibilities[visibility],
+        ...(visibilityChanged && visibilities[visibility] === "PUBLIC" ? { publishedAt: new Date() } : {}),
         ...(downloadable !== undefined
           ? { downloadable: downloadable === true }
           : {}),
@@ -862,7 +868,8 @@ export const setPhotoCover = async (request, reply) => {
           .where(and(eq(photos.id, gallery.coverPhotoId), eq(photos.galleryId, galleryId)))
       }
       await tx.update(galleries)
-        .set({ coverPhotoId: photoId })
+        .set({ coverPhotoId: photoId, ...(gallery.coverPhotoId !== photoId ?
+          { coverPositionX: 50, coverPositionY: 50, coverZoom: 100, coverContain: false } : {}) })
         .where(eq(galleries.id, galleryId))
     })
 
@@ -1001,7 +1008,7 @@ export const uploadPhotoCover = async (request, reply) => {
 
     await db
       .update(galleries)
-      .set({ coverPhotoId: insertedPhoto.id })
+      .set({ coverPhotoId: insertedPhoto.id, coverPositionX: 50, coverPositionY: 50, coverZoom: 100, coverContain: false })
       .where(eq(galleries.id, galleryId))
 
     return reply.code(200).send({ success: true, data: insertedPhoto })
@@ -1038,7 +1045,7 @@ export const deletePhotoCover = async (request, reply) => {
           .set({ isCoverPhoto: false })
           .where(and(eq(photos.id, gallery.coverPhotoId), eq(photos.galleryId, galleryId)))
         await tx.update(galleries)
-          .set({ coverPhotoId: null })
+          .set({ coverPhotoId: null, coverPositionX: 50, coverPositionY: 50, coverZoom: 100, coverContain: false })
           .where(eq(galleries.id, galleryId))
       })
     }

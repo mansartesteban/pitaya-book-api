@@ -31,6 +31,10 @@ export const galleries = pitaya.table("galleries", {
   coverPhotoId: uuid("cover_photo_id").references(() => photos.id, {
     onDelete: "set null",
   }),
+  coverPositionX: integer("cover_position_x").default(50).notNull(),
+  coverPositionY: integer("cover_position_y").default(50).notNull(),
+  coverZoom: integer("cover_zoom").default(100).notNull(),
+  coverContain: boolean("cover_contain").default(false).notNull(),
 
   password: text("password"),
 
@@ -49,4 +53,5 @@ export const galleries = pitaya.table("galleries", {
   }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
 })

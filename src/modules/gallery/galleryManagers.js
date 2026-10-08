@@ -59,20 +59,44 @@ export const listMyManagedGalleries = async (request, reply) => {
     slug: galleries.slug,
     visibility: galleries.visibility,
     expiresAt: galleries.expiresAt,
+    parentGallery: galleries.parentGallery,
     contactId: companyContacts.id,
   }).from(galleryManagerGrants)
     .innerJoin(galleries, eq(galleryManagerGrants.galleryId, galleries.id))
     .innerJoin(companyContacts, eq(galleryManagerGrants.contactId, companyContacts.id))
     .where(and(ilike(companyContacts.email, account.email), eq(companyContacts.companyId, galleries.clientCompanyId)))
   const direct = await db.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
-    visibility: galleries.visibility, expiresAt: galleries.expiresAt })
+    visibility: galleries.visibility, expiresAt: galleries.expiresAt, parentGallery: galleries.parentGallery })
     .from(galleryUserManagerGrants).innerJoin(galleries, eq(galleryUserManagerGrants.galleryId, galleries.id))
     .where(eq(galleryUserManagerGrants.userId, request.user.id))
   const invited = await db.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
-    visibility: galleries.visibility, expiresAt: galleries.expiresAt })
+    visibility: galleries.visibility, expiresAt: galleries.expiresAt, parentGallery: galleries.parentGallery })
     .from(galleryManagerInvitations).innerJoin(galleries, eq(galleryManagerInvitations.galleryId, galleries.id))
     .where(ilike(galleryManagerInvitations.email, account.email))
-  return reply.send({ success: true, data: [...new Map([...rows, ...direct, ...invited].map((item) => [item.id, item])).values()] })
+  const managed = [...new Map([...rows, ...direct, ...invited].map((item) => [item.id, item])).values()]
+  const ancestorCache = new Map()
+  async function parentOf(id) {
+    if (!ancestorCache.has(id)) {
+      const [parent] = await db.select({ expiresAt: galleries.expiresAt, parentGallery: galleries.parentGallery })
+        .from(galleries).where(eq(galleries.id, id))
+      ancestorCache.set(id, parent || null)
+    }
+    return ancestorCache.get(id)
+  }
+  for (const gallery of managed) {
+    const visited = new Set([gallery.id])
+    let parentId = gallery.parentGallery
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId)
+      const parent = await parentOf(parentId)
+      if (parent?.expiresAt && (!gallery.expiresAt || parent.expiresAt < gallery.expiresAt)) {
+        gallery.expiresAt = parent.expiresAt
+      }
+      parentId = parent?.parentGallery
+    }
+    delete gallery.parentGallery
+  }
+  return reply.send({ success: true, data: managed })
 }
 
 async function ownedGallery(request, galleryId) {

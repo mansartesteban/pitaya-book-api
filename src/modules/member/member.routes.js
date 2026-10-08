@@ -3,6 +3,7 @@ import { db } from "../../database/index.js"
 import { companyContacts, galleries, galleryInteractions, galleryManagerGrants, galleryManagerInvitations, galleryUserManagerGrants, galleryViewEvents, photos, users } from "../../database/schema.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
+import { saveCoverFraming, coverFramingFields } from "../gallery/galleryCoverFraming.js"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -42,13 +43,28 @@ export async function canManage(userId, galleryId) {
 
 async function galleryBranch(rootId) {
   const [root] = await db.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
+    expiresAt: galleries.expiresAt,
+    coverPhotoId: galleries.coverPhotoId, ...coverFramingFields,
     parentGallery: galleries.parentGallery }).from(galleries).where(eq(galleries.id, rootId))
   if (!root) return []
+  let ancestorId = root.parentGallery
+  const ancestors = new Set([root.id])
+  while (ancestorId && !ancestors.has(ancestorId)) {
+    ancestors.add(ancestorId)
+    const [ancestor] = await db.select({ expiresAt: galleries.expiresAt, parentGallery: galleries.parentGallery })
+      .from(galleries).where(eq(galleries.id, ancestorId))
+    if (ancestor?.expiresAt && (!root.expiresAt || ancestor.expiresAt < root.expiresAt)) {
+      root.expiresAt = ancestor.expiresAt
+    }
+    ancestorId = ancestor?.parentGallery
+  }
   const branch = [root]
   const seen = new Set([root.id])
   let frontier = [root.id]
   while (frontier.length) {
     const children = await db.select({ id: galleries.id, title: galleries.title, slug: galleries.slug,
+      expiresAt: galleries.expiresAt,
+      coverPhotoId: galleries.coverPhotoId, ...coverFramingFields,
       parentGallery: galleries.parentGallery }).from(galleries).where(inArray(galleries.parentGallery, frontier))
     const fresh = children.filter((item) => !seen.has(item.id))
     for (const child of fresh) seen.add(child.id)
@@ -60,6 +76,14 @@ async function galleryBranch(rootId) {
 
 export default function memberRoutes(fastify) {
   fastify.addHook("preHandler", authenticationMiddleware)
+
+  fastify.patch("/galleries/:galleryId/cover-framing", async (request, reply) => {
+    if (!uuid.test(request.params.galleryId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
+    if (!await canManage(request.user.id, request.params.galleryId)) {
+      return reply.code(403).send({ success: false, message: "Accès non autorisé" })
+    }
+    return saveCoverFraming(request, reply)
+  })
 
   fastify.get("/galleries/:galleryId/tree", async (request, reply) => {
     const { galleryId } = request.params
@@ -83,6 +107,10 @@ export default function memberRoutes(fastify) {
     const nodes = new Map(branch.map((item) => [item.id, { ...item, photos: [], comments: [], children: [] }]))
     for (const photo of photoRows) nodes.get(photo.galleryId).photos.push({ ...photo,
       thumbnailUrl: signPhotoUrl(photo, true, 300), comments: [] })
+    for (const node of nodes.values()) {
+      const cover = node.photos.find((photo) => photo.id === node.coverPhotoId)
+      node.coverUrl = cover ? signPhotoUrl(cover, true, 600) : null
+    }
     const photosById = new Map([...nodes.values()].flatMap((node) => node.photos.map((photo) => [photo.id, photo])))
     for (const { guestName, firstname, lastname, ...comment } of commentRows) {
       const value = { ...comment, author: guestName || [firstname, lastname].filter(Boolean).join(" ") || "Utilisateur" }
