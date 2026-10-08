@@ -69,7 +69,8 @@ export default function memberRoutes(fastify) {
     if (!branch.length) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
     const ids = branch.map((item) => item.id)
     const [photoRows, commentRows] = await Promise.all([
-      db.select({ id: photos.id, extension: photos.extension, isHidden: photos.isHidden, galleryId: photos.galleryId })
+      db.select({ id: photos.id, extension: photos.extension, isHidden: photos.isHidden,
+        galleryId: photos.galleryId, width: photos.width, height: photos.height })
         .from(photos).where(inArray(photos.galleryId, ids)),
       db.select({ id: galleryInteractions.id, galleryId: galleryInteractions.galleryId,
         photoId: galleryInteractions.photoId, content: galleryInteractions.content,

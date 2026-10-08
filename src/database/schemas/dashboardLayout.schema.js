@@ -13,3 +13,9 @@ export const memberLibraryLayouts = pitaya.table("member_library_layouts", {
   layout: jsonb("layout").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 })
+
+export const memberGalleryLayouts = pitaya.table("member_gallery_layouts", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  layout: jsonb("layout").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+})

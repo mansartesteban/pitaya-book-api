@@ -182,6 +182,15 @@ test("confirmed comments can be moderated without exposing hidden comments", { s
     assert.equal(saveLayout.statusCode, 200, saveLayout.body)
     const restoredLayout = await app.inject({ method: "GET", url: "/api/users/me/library-layout", headers: { cookie: memberCookie } })
     assert.deepEqual(restoredLayout.json().data, layout)
+    const managedLayout = { columns: 4, rows: 5, widgets: [
+      { id: "managed", x: 0, y: 0, width: 2, height: 3 },
+      { id: "upcoming", x: 2, y: 0, width: 2, height: 2 },
+    ] }
+    const savedManagedLayout = await app.inject({ method: "PUT", url: "/api/users/me/managed-galleries-layout",
+      headers: { cookie: memberCookie }, payload: managedLayout })
+    assert.equal(savedManagedLayout.statusCode, 200, savedManagedLayout.body)
+    const restoredManagedLayout = await app.inject({ method: "GET", url: "/api/users/me/managed-galleries-layout", headers: { cookie: memberCookie } })
+    assert.deepEqual(restoredManagedLayout.json().data, managedLayout)
     await app.inject({ method: "PATCH", url: `/api/member/galleries/${gallery.id}/photos/${photo.id}/visibility`,
       headers: { cookie: memberCookie }, payload: { hidden: true } })
     const hiddenSelection = await app.inject({ method: "GET", url: `/api/member/library/selections/${selectionId}`, headers: { cookie: memberCookie } })

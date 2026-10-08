@@ -2,7 +2,7 @@ import { authenticationMiddleware, adminMiddleware } from "../../lib/middlewares
 import { getAllUsers, getUser } from "./user.actions.js"
 import { count, eq } from "drizzle-orm"
 import { db } from "../../database/index.js"
-import { dashboardLayouts, memberLibraryLayouts, users } from "../../database/schema.js"
+import { dashboardLayouts, memberGalleryLayouts, memberLibraryLayouts, users } from "../../database/schema.js"
 import { listMyManagedGalleries } from "../gallery/galleryManagers.js"
 
 const widgetIds = ["clients", "galleries", "photos", "articles", "actions", "nextArticles", "upcoming", "users"]
@@ -55,6 +55,21 @@ export default function userRoutes(fastify) {
     return reply.send({ success: true, data: layout })
   })
   fastify.get("/me/managed-galleries", { preHandler: [authenticationMiddleware] }, listMyManagedGalleries)
+  fastify.get("/me/managed-galleries-layout", { preHandler: [authenticationMiddleware] }, async (request, reply) => {
+    const [saved] = await db.select({ layout: memberGalleryLayouts.layout }).from(memberGalleryLayouts)
+      .where(eq(memberGalleryLayouts.userId, request.user.id))
+    return reply.send({ success: true, data: saved?.layout || null })
+  })
+  fastify.put("/me/managed-galleries-layout", { preHandler: [authenticationMiddleware] }, async (request, reply) => {
+    if (!validLayout(request.body, ["managed", "upcoming"])) {
+      return reply.code(400).send({ success: false, message: "Disposition invalide" })
+    }
+    const layout = { columns: request.body.columns, rows: request.body.rows,
+      widgets: request.body.widgets.map(({ id, x, y, width, height }) => ({ id, x, y, width, height })) }
+    await db.insert(memberGalleryLayouts).values({ userId: request.user.id, layout })
+      .onConflictDoUpdate({ target: memberGalleryLayouts.userId, set: { layout, updatedAt: new Date() } })
+    return reply.send({ success: true, data: layout })
+  })
   fastify.get("/me/dashboard-layout", { preHandler: [authenticationMiddleware, adminMiddleware] }, async (request, reply) => {
     const [saved] = await db.select({ layout: dashboardLayouts.layout }).from(dashboardLayouts)
       .where(eq(dashboardLayouts.userId, request.user.id))
