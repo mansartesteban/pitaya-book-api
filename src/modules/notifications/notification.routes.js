@@ -27,4 +27,9 @@ export default function notificationRoutes(fastify) {
       .returning({ id: adminNotifications.id })
     return reply.send({ success: true, data: { updated: !!updated } })
   })
+  fastify.patch("/read-all", async (request, reply) => {
+    await db.update(adminNotifications).set({ readAt: new Date() })
+      .where(and(eq(adminNotifications.ownerUserId, request.user.id), isNull(adminNotifications.readAt)))
+    return reply.send({ success: true })
+  })
 }

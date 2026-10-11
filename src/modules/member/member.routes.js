@@ -1,9 +1,11 @@
 import { and, eq, gte, ilike, inArray, sql } from "drizzle-orm"
 import { db } from "../../database/index.js"
-import { companyContacts, galleries, galleryInteractions, galleryManagerGrants, galleryManagerInvitations, galleryUserManagerGrants, galleryViewEvents, photos, users } from "../../database/schema.js"
+import { commentReports, companyContacts, galleries, galleryInteractions, galleryManagerGrants, galleryManagerInvitations, galleryUserManagerGrants, galleryViewEvents, photos, users } from "../../database/schema.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
 import { signPhotoUrl } from "../../lib/utils/Photo.js"
 import { saveCoverFraming, coverFramingFields } from "../gallery/galleryCoverFraming.js"
+import { listGalleryReminders, createGalleryReminder, updateGalleryReminder, deleteGalleryReminder,
+  listGalleryReminderDeliveries, retryGalleryReminderDelivery } from "../gallery/galleryReminderSettings.js"
 import fs from "node:fs/promises"
 import path from "node:path"
 
@@ -77,6 +79,51 @@ async function galleryBranch(rootId) {
 export default function memberRoutes(fastify) {
   fastify.addHook("preHandler", authenticationMiddleware)
 
+  const reminderAccess = async (request, reply) => {
+    if (!uuid.test(request.params.galleryId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
+    if (!await canManage(request.user.id, request.params.galleryId)) return reply.code(403).send({ success: false, message: "Accès non autorisé" })
+    request.memberReminderAccess = true
+  }
+  fastify.get("/galleries/:galleryId/reminder-contacts", { preHandler: reminderAccess }, async (request, reply) => {
+    const [gallery] = await db.select({ companyId: galleries.clientCompanyId }).from(galleries)
+      .where(eq(galleries.id, request.params.galleryId))
+    if (!gallery) return reply.code(404).send({ success: false, message: "Galerie introuvable" })
+    const contacts = gallery.companyId ? await db.select({ id: companyContacts.id,
+      firstname: companyContacts.firstname, lastname: companyContacts.lastname, email: companyContacts.email })
+      .from(companyContacts).where(eq(companyContacts.companyId, gallery.companyId)) : []
+    return reply.send({ success: true, data: { companyId: gallery.companyId, contacts } })
+  })
+  fastify.get("/galleries/:galleryId/reminders", { preHandler: reminderAccess }, listGalleryReminders)
+  fastify.post("/galleries/:galleryId/reminders", { preHandler: reminderAccess }, createGalleryReminder)
+  fastify.put("/galleries/:galleryId/reminders/:reminderId", { preHandler: reminderAccess }, updateGalleryReminder)
+  fastify.delete("/galleries/:galleryId/reminders/:reminderId", { preHandler: reminderAccess }, deleteGalleryReminder)
+  fastify.get("/galleries/:galleryId/reminder-deliveries", { preHandler: reminderAccess }, listGalleryReminderDeliveries)
+  fastify.post("/galleries/:galleryId/reminder-deliveries/:deliveryId/retry", { preHandler: reminderAccess }, retryGalleryReminderDelivery)
+
+  fastify.get("/galleries/:galleryId/access", async (request, reply) => {
+    const { galleryId } = request.params
+    if (!uuid.test(galleryId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
+    return reply.send({ success: true, data: { canManage: await canManage(request.user.id, galleryId) } })
+  })
+
+  fastify.patch("/galleries/:galleryId/cover-photo", async (request, reply) => {
+    const { galleryId } = request.params
+    const photoId = request.body?.photoId
+    if (!uuid.test(galleryId) || !uuid.test(photoId)) return reply.code(400).send({ success: false, message: "Demande invalide" })
+    if (!await canManage(request.user.id, galleryId)) return reply.code(403).send({ success: false, message: "Accès non autorisé" })
+    const [photo] = await db.select({ id: photos.id }).from(photos).where(and(
+      eq(photos.id, photoId), eq(photos.galleryId, galleryId), eq(photos.isHidden, false)
+    ))
+    if (!photo) return reply.code(404).send({ success: false, message: "Photo introuvable" })
+    await db.transaction(async (tx) => {
+      await tx.update(photos).set({ isCoverPhoto: false }).where(eq(photos.galleryId, galleryId))
+      await tx.update(photos).set({ isCoverPhoto: true }).where(eq(photos.id, photoId))
+      await tx.update(galleries).set({ coverPhotoId: photoId, coverPositionX: 50, coverPositionY: 50,
+        coverZoom: 100, coverContain: false }).where(eq(galleries.id, galleryId))
+    })
+    return reply.send({ success: true, data: { photoId } })
+  })
+
   fastify.patch("/galleries/:galleryId/cover-framing", async (request, reply) => {
     if (!uuid.test(request.params.galleryId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
     if (!await canManage(request.user.id, request.params.galleryId)) {
@@ -104,6 +151,11 @@ export default function memberRoutes(fastify) {
         .where(and(inArray(galleryInteractions.galleryId, ids), eq(galleryInteractions.kind, "COMMENT"),
           inArray(galleryInteractions.status, ["PUBLISHED", "HIDDEN"]))),
     ])
+    const pendingReports = commentRows.length ? await db.select({ commentId: commentReports.commentId,
+      count: sql`count(*)` }).from(commentReports)
+      .where(and(inArray(commentReports.commentId, commentRows.map((item) => item.id)), eq(commentReports.status, "PENDING")))
+      .groupBy(commentReports.commentId) : []
+    const reportCounts = new Map(pendingReports.map((item) => [item.commentId, Number(item.count)]))
     const nodes = new Map(branch.map((item) => [item.id, { ...item, photos: [], comments: [], children: [] }]))
     for (const photo of photoRows) nodes.get(photo.galleryId).photos.push({ ...photo,
       thumbnailUrl: signPhotoUrl(photo, true, 300), comments: [] })
@@ -113,7 +165,8 @@ export default function memberRoutes(fastify) {
     }
     const photosById = new Map([...nodes.values()].flatMap((node) => node.photos.map((photo) => [photo.id, photo])))
     for (const { guestName, firstname, lastname, ...comment } of commentRows) {
-      const value = { ...comment, author: guestName || [firstname, lastname].filter(Boolean).join(" ") || "Utilisateur" }
+      const value = { ...comment, reportCount: reportCounts.get(comment.id) || 0,
+        author: guestName || [firstname, lastname].filter(Boolean).join(" ") || "Utilisateur" }
       const photo = comment.photoId ? photosById.get(comment.photoId) : null
       if (photo && photo.galleryId === comment.galleryId) photo.comments.push(value)
       else nodes.get(comment.galleryId).comments.push(value)

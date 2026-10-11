@@ -10,6 +10,7 @@ import articleRoutes from "./article/article.routes.js"
 import notificationRoutes from "./notifications/notification.routes.js"
 import memberRoutes from "./member/member.routes.js"
 import memberLibraryRoutes from "./member/memberLibrary.routes.js"
+import commentReportsRoutes from "./gallery/commentReports.routes.js"
 
 export default async (app) => {
   await app.register(authRoutes, { prefix: "/api/auth" })
@@ -24,4 +25,5 @@ export default async (app) => {
   await app.register(notificationRoutes, { prefix: "/api/notifications" })
   await app.register(memberRoutes, { prefix: "/api/member" })
   await app.register(memberLibraryRoutes, { prefix: "/api/member/library" })
+  await app.register(commentReportsRoutes, { prefix: "/api/comment-reports" })
 }

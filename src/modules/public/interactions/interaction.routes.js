@@ -1,12 +1,14 @@
 import crypto from "node:crypto"
 import { and, desc, eq, gt, gte, isNotNull, isNull, lt, or, sql } from "drizzle-orm"
 import { db } from "../../../database/index.js"
-import { adminNotifications, galleries, galleryInteractions, photos, users } from "../../../database/schema.js"
+import { adminNotifications, commentReports, galleries, galleryInteractions, photos, users } from "../../../database/schema.js"
 import { getAncestorAccess, getInteractionSettings } from "../gallery/gallery.actions.js"
 import { isGalleryUnlocked } from "../gallery/downloadAccess.js"
 import { sendVerificationMail } from "../../auth/auth.service.js"
 import jwt from "jsonwebtoken"
+import nodemailer from "nodemailer"
 import { prefixReply, sanitizeComment } from "./commentHtml.js"
+import { canManage } from "../../member/member.routes.js"
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -15,6 +17,35 @@ const allowedReactions = new Set([
   "ANGRY", "VOMIT", "UNAMUSED", "NEUTRAL", "FEAR", "SAD", "HUG",
 ])
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex")
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+
+async function mailCommentReport(admins, account, gallery, commentId, request) {
+  if (process.env.COMMENT_REPORT_MAIL_ENABLED === 'false' || !admins.length ||
+    !process.env.SMTP_SERVER || !process.env.SMTP_USERNAME || !process.env.SMTP_PASSWORD) {
+    request.log.warn({ commentId, adminCount: admins.length }, 'Courriel de signalement non configuré ou désactivé')
+    return false
+  }
+  const link = `${String(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/application/commentaires-signales`
+  const reporter = [account.firstname, account.lastname].filter(Boolean).join(' ') || account.email
+  const text = `${reporter} (${account.email}) a signalé un commentaire dans « ${gallery.title} ».\n\nExaminer le signalement : ${link}\nIdentifiant du commentaire : ${commentId}`
+  const transport = nodemailer.createTransport({ host: process.env.SMTP_SERVER,
+    port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
+    auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
+  const recipients = [...new Set(admins.map((admin) => admin.email).filter(Boolean))]
+  try {
+    const delivery = await transport.sendMail({ from: `Pitaya Photo <${process.env.SMTP_FROM || process.env.SMTP_USERNAME}>`,
+      to: recipients, subject: 'Un commentaire a été signalé · Pitaya Photo', text,
+      html: `<p><strong>${escapeHtml(reporter)}</strong> (${escapeHtml(account.email)}) a signalé un commentaire dans « ${escapeHtml(gallery.title)} ».</p><p><a href="${escapeHtml(link)}">Examiner le signalement</a></p><p>Identifiant du commentaire : ${escapeHtml(commentId)}</p>` })
+    const accepted = delivery.accepted?.length > 0
+    request.log.info({ commentId, recipientCount: recipients.length, accepted, rejectedCount: delivery.rejected?.length || 0 },
+      'Résultat SMTP du courriel de signalement')
+    return accepted
+  } catch (error) {
+    request.log.error({ error, commentId }, 'Impossible d’envoyer le courriel de signalement')
+    return false
+  }
+}
 
 async function notifyReply(commentId) {
   const [reply] = await db.select({ id: galleryInteractions.id, galleryId: galleryInteractions.galleryId,
@@ -78,6 +109,36 @@ function confirmedGuest(request) {
 }
 
 export default function interactionRoutes(fastify) {
+  fastify.post("/:galleryId/comments/:commentId/report", async (request, reply) => {
+    const { galleryId, commentId } = request.params
+    if (!uuid.test(galleryId) || !uuid.test(commentId)) return reply.code(400).send({ success: false, message: "Identifiant invalide" })
+    const account = await confirmedUser(request)
+    if (!account) return reply.code(401).send({ success: false, message: "Connexion requise" })
+    const [comment] = await db.select({ id: galleryInteractions.id, photoId: galleryInteractions.photoId,
+      galleryTitle: galleries.title })
+      .from(galleryInteractions)
+      .innerJoin(galleries, eq(galleryInteractions.galleryId, galleries.id))
+      .where(and(eq(galleryInteractions.id, commentId), eq(galleryInteractions.galleryId, galleryId),
+        eq(galleryInteractions.kind, "COMMENT"), eq(galleryInteractions.status, "PUBLISHED")))
+    if (!comment || !(await visibleTarget(request, galleryId, comment.photoId) ||
+      await canManage(account.id, galleryId)))
+      return reply.code(404).send({ success: false, message: "Commentaire introuvable" })
+    const [existingReport] = await db.select({ status: commentReports.status }).from(commentReports)
+      .where(and(eq(commentReports.commentId, commentId), eq(commentReports.reporterUserId, account.id)))
+    if (existingReport?.status === 'PENDING') return reply.send({ success: true, alreadyReported: true })
+    await db.insert(commentReports).values({ commentId, reporterUserId: account.id })
+      .onConflictDoUpdate({ target: [commentReports.commentId, commentReports.reporterUserId],
+        set: { status: "PENDING", reviewedAt: null, createdAt: new Date() } })
+    const admins = await db.select({ id: users.id, email: users.email }).from(users).where(and(eq(users.isActive, true),
+      or(eq(users.role, "ADMIN"), eq(users.role, "SUPERADMIN"), eq(users.email, "esteban.mansart@gmail.com"))))
+    if (admins.length) await db.insert(adminNotifications).values(admins.map((admin) => ({ ownerUserId: admin.id,
+      galleryId, photoId: comment.photoId, commentId, kind: "COMMENT_REPORTED",
+      eventKey: `comment-report:${commentId}:${account.id}`,
+      title: "Commentaire signalé", body: `${account.firstname || "Un utilisateur"} a signalé un commentaire.` })))
+      .onConflictDoNothing()
+    const mailSent = await mailCommentReport(admins, account, { title: comment.galleryTitle }, commentId, request)
+    return reply.send({ success: true, mailSent })
+  })
   fastify.get("/:galleryId", async (request, reply) => {
     const { galleryId } = request.params
     const photoId = request.query?.photoId || null
@@ -98,6 +159,9 @@ export default function interactionRoutes(fastify) {
       .orderBy(desc(galleryInteractions.createdAt)).limit(200)
     const account = await confirmedUser(request)
     const guest = account ? null : confirmedGuest(request)
+    const reportedIds = account ? new Set((await db.select({ commentId: commentReports.commentId })
+      .from(commentReports).where(and(eq(commentReports.reporterUserId, account.id), eq(commentReports.status, 'PENDING'))))
+      .map((report) => report.commentId)) : new Set()
     const myReaction = settings.allowReactions && (account || guest)
       ? rows.find((row) => row.kind === "REACTION" &&
         (account ? row.userId === account.id || row.guestEmail === account.email : row.guestEmail === guest.email))?.reaction || null
@@ -114,6 +178,7 @@ export default function interactionRoutes(fastify) {
       ...row, author: guestName || [firstname, lastname].filter(Boolean).join(" ") || "Utilisateur",
       mine: account ? userId === account.id || guestEmail === account.email : !!guest && guestEmail === guest.email,
       ...(row.kind === "COMMENT" ? { contentHtml: sanitizeComment(row.content).html,
+        reportedByMe: reportedIds.has(row.id),
         reactions: commentReactions.get(row.id) || [] } : {}),
     })) })
   })

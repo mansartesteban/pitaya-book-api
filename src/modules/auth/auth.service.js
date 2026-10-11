@@ -234,12 +234,16 @@ export async function sendVerificationMail(user, verificationUrl, options = {}) 
     port: Number(process.env.SMTP_PORT || 587), secure: Number(process.env.SMTP_PORT) === 465,
     auth: { user: process.env.SMTP_USERNAME, pass: process.env.SMTP_PASSWORD } })
   await transport.sendMail({
-    from: `Pitaya Photo <${process.env.SMTP_FROM || "noreply@pitaya-photo.com"}>`,
-    replyTo: "esteban.mansart@gmail.com",
+    from: `Pitaya Photo <${process.env.SMTP_FROM || process.env.SMTP_USERNAME}>`,
     to: user.email,
     subject: options.guestInteraction
-      ? "Confirmez votre contribution à une galerie Pitaya Photo"
-      : "Vérification de votre compte Pitaya Photo",
+      ? "Confirmez votre contribution · Pitaya Photo"
+      : "Confirmez votre adresse e-mail · Pitaya Photo",
+    text: options.galleryInvitation
+      ? `Bonjour${user.firstname ? ` ${user.firstname}` : ''},\n\nVous êtes invité à gérer une galerie Pitaya Photo. Créez votre compte avec cette adresse : ${verificationUrl}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.`
+      : options.guestInteraction
+      ? `Bonjour${user.firstname ? ` ${user.firstname}` : ''},\n\nConfirmez votre adresse pour publier votre contribution : ${verificationUrl}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.`
+      : `Bonjour${user.firstname ? ` ${user.firstname}` : ''},\n\nConfirmez votre adresse e-mail Pitaya Photo avec ce lien : ${verificationUrl}\n\nSi vous n'avez pas créé de compte, ignorez ce message.`,
     html: mailTemplates(user, verificationUrl, options)[0],
   })
 }

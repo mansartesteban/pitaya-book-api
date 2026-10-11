@@ -203,10 +203,13 @@ export const getCompanySummary = async (request, reply) => {
     }
   }
   const galleryRows = rows.filter((row) => included.has(row.id)).map((row) => ({
-    id: row.id, title: row.title, photoCount: Number(row.photoCount),
+    id: row.id, title: row.title, parentGallery: row.parentGallery,
+    photoCount: Number(row.photoCount),
   }))
+  const rootCount = galleryRows.filter((row) => !row.parentGallery || !included.has(row.parentGallery)).length
   return reply.send({ success: true, data: {
-    galleryCount: galleryRows.length,
+    galleryCount: rootCount,
+    subGalleryCount: galleryRows.length - rootCount,
     photoCount: galleryRows.reduce((sum, row) => sum + row.photoCount, 0),
     galleries: galleryRows,
   } })

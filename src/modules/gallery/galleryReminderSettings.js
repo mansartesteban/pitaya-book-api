@@ -14,7 +14,9 @@ async function ownedRootGallery(request, reply) {
   }
   const [gallery] = await db.select({
     id: galleries.id, parentGallery: galleries.parentGallery, companyId: galleries.clientCompanyId,
-  }).from(galleries).where(and(eq(galleries.id, galleryId), eq(galleries.ownerUserId, request.user.id)))
+  }).from(galleries).where(request.memberReminderAccess
+    ? eq(galleries.id, galleryId)
+    : and(eq(galleries.id, galleryId), eq(galleries.ownerUserId, request.user.id)))
   if (!gallery) reply.code(404).send({ success: false, message: "Galerie introuvable" })
   else if (gallery.parentGallery) reply.code(400).send({ success: false, message: "Les rappels sont définis sur la galerie parente" })
   return gallery?.parentGallery ? null : gallery
@@ -33,9 +35,9 @@ async function validateReminder(request, reply, gallery) {
     return null
   }
   if (gallery.companyId) {
-    const [company] = await db.select({ id: companies.id }).from(companies).where(and(
-      eq(companies.id, gallery.companyId), or(eq(companies.userId, request.user.id), isNull(companies.userId))
-    ))
+    const [company] = await db.select({ id: companies.id }).from(companies).where(request.memberReminderAccess
+      ? eq(companies.id, gallery.companyId)
+      : and(eq(companies.id, gallery.companyId), or(eq(companies.userId, request.user.id), isNull(companies.userId))))
     if (!company) {
       reply.code(404).send({ success: false, message: "Société introuvable" })
       return null
