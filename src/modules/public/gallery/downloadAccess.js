@@ -13,11 +13,15 @@ export const isGalleryUnlocked = (gallery, request) => {
 
 export const canDownloadGallery = (gallery, request) => {
   if (!gallery?.downloadable) return false
+  return canViewGallery(gallery, request)
+}
+
+export const canViewGallery = (gallery, request) => {
+  if (!gallery) return false
   if (gallery.visibility === "PUBLIC" || gallery.visibility === "UNLISTED") return true
   return gallery.visibility === "PRIVATE" && isGalleryUnlocked(gallery, request)
 }
 
 export const canDownloadPhoto = (gallery, request) => {
-  if (gallery?.visibility === "PUBLIC" || gallery?.visibility === "UNLISTED") return true
-  return gallery?.visibility === "PRIVATE" && isGalleryUnlocked(gallery, request)
+  return gallery?.photoDownloadable === true && canViewGallery(gallery, request)
 }

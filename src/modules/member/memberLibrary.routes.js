@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "../../database/index.js"
 import { favoriteGalleries, favoritePhotos, galleries, photoSelectionItems, photoSelections, photos, users } from "../../database/schema.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
-import { signPhotoUrl } from "../../lib/utils/Photo.js"
+import { publicPhotoUrls } from "../public/gallery/photoPreview.js"
 import { applyGalleryExpirations } from "../gallery/galleryExpiration.js"
 import { visibleTarget } from "../public/interactions/interaction.routes.js"
 import { canDownloadPhoto } from "../public/gallery/downloadAccess.js"
@@ -17,11 +17,12 @@ async function verified(request, reply) {
 
 async function accessiblePhoto(request, photoId) {
   const [photo] = await db.select({ id: photos.id, galleryId: photos.galleryId, extension: photos.extension,
-    galleryTitle: galleries.title, gallerySlug: galleries.slug, visibility: galleries.visibility })
+    galleryTitle: galleries.title, gallerySlug: galleries.slug, visibility: galleries.visibility,
+    photoDownloadable: galleries.photoDownloadable })
     .from(photos).innerJoin(galleries, eq(photos.galleryId, galleries.id)).where(eq(photos.id, photoId))
   if (!photo || !await visibleTarget(request, photo.galleryId, photoId)) return null
-  return { ...photo, thumbnailUrl: signPhotoUrl(photo, true, 300),
-    downloadAllowed: canDownloadPhoto({ visibility: photo.visibility, id: photo.galleryId }, request) }
+  return { ...photo, thumbnailUrl: publicPhotoUrls(photo)[300],
+    downloadAllowed: canDownloadPhoto(photo, request) }
 }
 
 export default function memberLibraryRoutes(fastify) {
@@ -50,7 +51,7 @@ export default function memberLibraryRoutes(fastify) {
       const cover = visible.find((photo) => photo.id === gallery.coverPhotoId) || visible[0]
       visibleGalleries.push({ id: gallery.id, title: gallery.title, slug: gallery.slug,
         createdAt: gallery.createdAt, photoCount: visible.length,
-        thumbnailUrl: cover ? signPhotoUrl(cover, true, 300) : null })
+        thumbnailUrl: cover ? publicPhotoUrls(cover)[300] : null })
     }
     const visiblePhotos = []
     for (const photo of photoRows) {

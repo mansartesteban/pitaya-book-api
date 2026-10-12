@@ -2,13 +2,14 @@ import { db } from "../../../database/index.js"
 import { galleries, photos, users } from "../../../database/schema.js"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { signPhotoUrl } from "../../../lib/utils/Photo.js"
+import { publicPhotoUrls, sendPhotoPreview } from "./photoPreview.js"
 import * as BunnyStorageSDK from "@bunny.net/storage-sdk"
 import bcrypt from "bcrypt"
 import { Readable } from "node:stream"
 import slugify from "slugify"
 import path from "node:path"
 import fs from "node:fs"
-import { canDownloadGallery, canDownloadPhoto, galleryAccessToken, isGalleryUnlocked } from "./downloadAccess.js"
+import { canDownloadGallery, canDownloadPhoto, canViewGallery, galleryAccessToken, isGalleryUnlocked } from "./downloadAccess.js"
 import { buildArchiveEntries } from "./archivePaths.js"
 import { writeGalleryArchive } from "./archiveWriter.js"
 
@@ -138,11 +139,7 @@ export const getAllGalleries = async (request, reply) => {
       if (!coverIds.has(photo.id) && (photo.isCoverPhoto || galleryPhotos.length >= 3)) continue
       const signedPhoto = {
         ...photo,
-        urls: {
-          300: signPhotoUrl(photo, true, 300),
-          600: signPhotoUrl(photo, true, 600),
-          original: signPhotoUrl(photo, true),
-        },
+        urls: publicPhotoUrls(photo),
       }
       if (coverIds.has(photo.id)) coverPhotos.set(photo.id, signedPhoto)
 
@@ -219,6 +216,7 @@ export const getGallery = async (request, reply) => {
       parentGallery: galleries.parentGallery,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      photoDownloadable: galleries.photoDownloadable,
       allowReactions: galleries.allowReactions,
       allowComments: galleries.allowComments,
       coverPhotoId: galleries.coverPhotoId,
@@ -292,6 +290,7 @@ export const getPrivateGallery = async (request, reply) => {
         createdAt: galleries.createdAt,
         publishedAt: galleries.publishedAt,
         downloadable: galleries.downloadable,
+        photoDownloadable: galleries.photoDownloadable,
         allowReactions: galleries.allowReactions,
         allowComments: galleries.allowComments,
         coverPhotoId: galleries.coverPhotoId,
@@ -403,11 +402,7 @@ const getPublicGallery = async (gallery, request, reply) => {
         .where(and(eq(photos.galleryId, childrenGallery.id), eq(photos.isHidden, false)))
 
       const signedPhotos = foundPhotos.map((photo) => {
-        photo.urls = {
-          300: signPhotoUrl(photo, true, 300),
-          600: signPhotoUrl(photo, true, 600),
-          original: signPhotoUrl(photo, true),
-        }
+        photo.urls = publicPhotoUrls(photo)
         return photo
       })
       childrenGallery.coverPhoto = signedPhotos.find((photo) => photo.id === childrenGallery.coverPhotoId)
@@ -443,11 +438,7 @@ const getPublicGallery = async (gallery, request, reply) => {
             ))
             .limit(3)
           childrenGallery.photos = foundSubPhotos.map((photo) => {
-            photo.urls = {
-              300: signPhotoUrl(photo, true, 300),
-              600: signPhotoUrl(photo, true, 600),
-              original: signPhotoUrl(photo, true),
-            }
+            photo.urls = publicPhotoUrls(photo)
             return photo
           })
         }
@@ -473,11 +464,7 @@ const getPublicGallery = async (gallery, request, reply) => {
       )
 
   gallery.photos = foundPhotos.map((photo) => {
-    photo.urls = {
-      300: signPhotoUrl(photo, true, 300),
-      600: signPhotoUrl(photo, true, 600),
-      original: signPhotoUrl(photo, true),
-    }
+    photo.urls = publicPhotoUrls(photo)
     return photo
   })
 
@@ -534,11 +521,7 @@ const getPublicGallery = async (gallery, request, reply) => {
   if (coverPhoto) {
     gallery.coverPhoto = {
       ...coverPhoto,
-      urls: {
-        300: signPhotoUrl(coverPhoto, true, 300),
-        600: signPhotoUrl(coverPhoto, true, 600),
-        original: signPhotoUrl(coverPhoto, true),
-      },
+      urls: publicPhotoUrls(coverPhoto),
     }
   }
 
@@ -561,6 +544,7 @@ export const prepareDownloadPrivateGallery = async (request, reply) => {
       title: galleries.title,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      photoDownloadable: galleries.photoDownloadable,
       parentGallery: galleries.parentGallery,
     })
     .from(galleries)
@@ -604,6 +588,7 @@ export const downloadPrivateGallery = async (request, reply) => {
       title: galleries.title,
       visibility: galleries.visibility,
       downloadable: galleries.downloadable,
+      photoDownloadable: galleries.photoDownloadable,
       parentGallery: galleries.parentGallery,
     })
     .from(galleries)
@@ -642,6 +627,23 @@ export const downloadPrivateGallery = async (request, reply) => {
   return reply.send(stream)
 }
 
+export const previewPublicPhoto = async (request, reply) => {
+  const width = Number(request.query?.width)
+  if (![300, 600, 1600].includes(width)) return reply.code(400).send({ success: false, message: "Format invalide" })
+  const { galleryId, photoId } = request.validated.params
+  const [gallery] = await db.select({ id: galleries.id, visibility: galleries.visibility,
+    parentGallery: galleries.parentGallery }).from(galleries).where(eq(galleries.id, galleryId))
+  if (!gallery || gallery.visibility === "HIDDEN" || !canViewGallery(gallery, request) ||
+    (await getAncestorAccess(gallery, request)).blocked) {
+    return reply.code(404).send({ success: false, message: "Photo introuvable" })
+  }
+  const [photo] = await db.select({ id: photos.id, galleryId: photos.galleryId,
+    extension: photos.extension }).from(photos).where(and(
+    eq(photos.id, photoId), eq(photos.galleryId, galleryId), eq(photos.isHidden, false)))
+  if (!photo) return reply.code(404).send({ success: false, message: "Photo introuvable" })
+  return sendPhotoPreview(photo, width, request, reply)
+}
+
 export const downloadPublicPhoto = async (request, reply) => {
   try {
     const { galleryId, photoId } = request.validated.params
@@ -650,6 +652,7 @@ export const downloadPublicPhoto = async (request, reply) => {
         id: galleries.id,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        photoDownloadable: galleries.photoDownloadable,
         parentGallery: galleries.parentGallery,
       })
       .from(galleries)

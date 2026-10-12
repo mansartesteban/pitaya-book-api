@@ -1,0 +1,1 @@
+ALTER TABLE "pitaya"."galleries" ADD COLUMN "photo_downloadable" boolean DEFAULT true NOT NULL;

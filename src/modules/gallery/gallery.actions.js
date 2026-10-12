@@ -55,6 +55,7 @@ export const getAllGalleries = async (request, reply) => {
         description: galleries.description,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        photoDownloadable: galleries.photoDownloadable,
         allowReactions: galleries.allowReactions,
         allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
@@ -203,6 +204,7 @@ export const getOneGallery = async (request, reply) => {
         password: galleries.password,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        photoDownloadable: galleries.photoDownloadable,
         allowReactions: galleries.allowReactions,
         allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
@@ -385,6 +387,7 @@ export const createGallery = async (request, reply) => {
           visibility,
           publishedAt: visibility === "PUBLIC" ? createdAt : null,
           downloadable: request.validated.body.downloadable === true,
+          photoDownloadable: request.validated.body.photoDownloadable !== false,
           allowReactions: request.validated.body.allowReactions !== false,
           allowComments: request.validated.body.allowComments !== false,
           expiresAt,
@@ -444,6 +447,7 @@ export const updateGallery = async (request, reply) => {
       title,
       visibility,
       downloadable,
+      photoDownloadable,
       allowReactions,
       allowComments,
       expiresAt,
@@ -498,6 +502,9 @@ export const updateGallery = async (request, reply) => {
         ...(downloadable !== undefined
           ? { downloadable: downloadable === true }
           : {}),
+        ...(photoDownloadable !== undefined
+          ? { photoDownloadable: photoDownloadable === true }
+          : {}),
         ...(allowReactions !== undefined ? { allowReactions: allowReactions === true } : {}),
         ...(allowComments !== undefined ? { allowComments: allowComments === true } : {}),
         ...(expiresAt !== undefined ? { expiresAt: nextExpiration } : {}),
@@ -517,6 +524,7 @@ export const updateGallery = async (request, reply) => {
         title: galleries.title,
         visibility: galleries.visibility,
         downloadable: galleries.downloadable,
+        photoDownloadable: galleries.photoDownloadable,
         allowReactions: galleries.allowReactions,
         allowComments: galleries.allowComments,
         expiresAt: galleries.expiresAt,
@@ -545,16 +553,25 @@ export const updateGallery = async (request, reply) => {
 }
 export const updateGalleryDownloadable = async (request, reply) => {
   try {
+    if (typeof request.validated.body.downloadable !== "boolean" &&
+      typeof request.validated.body.photoDownloadable !== "boolean") {
+      return reply.code(400).send({ success: false, message: "Aucun réglage de téléchargement fourni" })
+    }
     const [updatedGallery] = await db
       .update(galleries)
-      .set({ downloadable: request.validated.body.downloadable === true })
+      .set({
+        ...(request.validated.body.downloadable !== undefined
+          ? { downloadable: request.validated.body.downloadable === true } : {}),
+        ...(request.validated.body.photoDownloadable !== undefined
+          ? { photoDownloadable: request.validated.body.photoDownloadable === true } : {}),
+      })
       .where(
         and(
           eq(galleries.id, request.validated.params.galleryId),
           eq(galleries.ownerUserId, request.user.id)
         )
       )
-      .returning({ downloadable: galleries.downloadable })
+      .returning({ downloadable: galleries.downloadable, photoDownloadable: galleries.photoDownloadable })
 
     if (!updatedGallery) {
       return reply.code(404).send({ success: false, message: "Galerie introuvable" })

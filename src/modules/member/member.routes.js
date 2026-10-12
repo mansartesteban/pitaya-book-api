@@ -2,7 +2,7 @@ import { and, eq, gte, ilike, inArray, sql } from "drizzle-orm"
 import { db } from "../../database/index.js"
 import { commentReports, companyContacts, galleries, galleryInteractions, galleryManagerGrants, galleryManagerInvitations, galleryUserManagerGrants, galleryViewEvents, photos, users } from "../../database/schema.js"
 import { authenticationMiddleware } from "../../lib/middlewares/authentication.js"
-import { signPhotoUrl } from "../../lib/utils/Photo.js"
+import { managerPreviewUrl, sendPhotoPreview } from "../public/gallery/photoPreview.js"
 import { saveCoverFraming, coverFramingFields } from "../gallery/galleryCoverFraming.js"
 import { listGalleryReminders, createGalleryReminder, updateGalleryReminder, deleteGalleryReminder,
   listGalleryReminderDeliveries, retryGalleryReminderDelivery } from "../gallery/galleryReminderSettings.js"
@@ -158,10 +158,10 @@ export default function memberRoutes(fastify) {
     const reportCounts = new Map(pendingReports.map((item) => [item.commentId, Number(item.count)]))
     const nodes = new Map(branch.map((item) => [item.id, { ...item, photos: [], comments: [], children: [] }]))
     for (const photo of photoRows) nodes.get(photo.galleryId).photos.push({ ...photo,
-      thumbnailUrl: signPhotoUrl(photo, true, 300), comments: [] })
+      thumbnailUrl: managerPreviewUrl(photo, 300), comments: [] })
     for (const node of nodes.values()) {
       const cover = node.photos.find((photo) => photo.id === node.coverPhotoId)
-      node.coverUrl = cover ? signPhotoUrl(cover, true, 600) : null
+      node.coverUrl = cover ? managerPreviewUrl(cover, 600) : null
     }
     const photosById = new Map([...nodes.values()].flatMap((node) => node.photos.map((photo) => [photo.id, photo])))
     for (const { guestName, firstname, lastname, ...comment } of commentRows) {
@@ -205,8 +205,24 @@ export default function memberRoutes(fastify) {
     const rows = await db.select({ id: photos.id, extension: photos.extension, isHidden: photos.isHidden, galleryId: photos.galleryId })
       .from(photos).where(eq(photos.galleryId, galleryId))
     return reply.send({ success: true, data: rows.map((photo) => ({
-      id: photo.id, isHidden: photo.isHidden, thumbnailUrl: signPhotoUrl(photo, true, 300),
+      id: photo.id, isHidden: photo.isHidden, thumbnailUrl: managerPreviewUrl(photo, 300),
     })) })
+  })
+
+  fastify.get("/galleries/:galleryId/photos/:photoId/preview", async (request, reply) => {
+    const { galleryId, photoId } = request.params
+    const width = Number(request.query?.width)
+    if (!uuid.test(galleryId) || !uuid.test(photoId) || ![300, 600, 1600].includes(width)) {
+      return reply.code(400).send({ success: false, message: "Demande invalide" })
+    }
+    if (!await canManage(request.user.id, galleryId)) {
+      return reply.code(403).send({ success: false, message: "Accès non autorisé" })
+    }
+    const [photo] = await db.select({ id: photos.id, galleryId: photos.galleryId,
+      extension: photos.extension }).from(photos).where(and(
+      eq(photos.id, photoId), eq(photos.galleryId, galleryId)))
+    if (!photo) return reply.code(404).send({ success: false, message: "Photo introuvable" })
+    return sendPhotoPreview(photo, width, request, reply)
   })
 
   fastify.patch("/galleries/:galleryId/photos/:photoId/visibility", async (request, reply) => {

@@ -21,6 +21,7 @@ export const createGalleryValidator = createValidator({
   ],
   visibility: [rules.required, rules.isNumber],
   downloadable: [rules.isBoolean],
+  photoDownloadable: [rules.isBoolean],
   allowReactions: [rules.isBoolean],
   allowComments: [rules.isBoolean],
   expiresAt: [rules.isDate],
@@ -43,6 +44,7 @@ export const updateGalleryValidator = composeValidators(
     name: [rules.isString],
     visibility: [rules.required, rules.isNumber],
     downloadable: [rules.isBoolean],
+    photoDownloadable: [rules.isBoolean],
     allowReactions: [rules.isBoolean],
     allowComments: [rules.isBoolean],
     expiresAt: [rules.isDate],
@@ -66,7 +68,7 @@ export const updateGalleryValidator = composeValidators(
   )
 )
 export const updateGalleryDownloadableValidator = composeValidators(
-  createValidator({ downloadable: [rules.required, rules.isBoolean] }),
+  createValidator({ downloadable: [rules.isBoolean], photoDownloadable: [rules.isBoolean] }),
   createValidator(
     { galleryId: [rules.required, rules.isUUID] },
     { source: "params" }
