@@ -2,6 +2,7 @@ import {
   downloadPrivateGallery,
   downloadPublicPhoto,
   getAllGalleries,
+  getSitemapGalleries,
   getGallery,
   getPrivateGallery,
   previewPublicPhoto,
@@ -23,6 +24,7 @@ export default function galleryRoutes(fastify) {
     },
     getAllGalleries
   )
+  fastify.get("/sitemap-entries", getSitemapGalleries)
   fastify.get(
     "/:galleryId",
     {

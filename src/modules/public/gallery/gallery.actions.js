@@ -12,6 +12,7 @@ import fs from "node:fs"
 import { canDownloadGallery, canDownloadPhoto, canViewGallery, galleryAccessToken, isGalleryUnlocked } from "./downloadAccess.js"
 import { buildArchiveEntries } from "./archivePaths.js"
 import { writeGalleryArchive } from "./archiveWriter.js"
+import { publicGallerySitemapRows } from "./gallerySitemap.js"
 
 const storageZone = BunnyStorageSDK.zone.connect_with_accesskey(
   BunnyStorageSDK.regions.StorageRegion.Falkenstein,
@@ -57,6 +58,22 @@ export const getInteractionSettings = async (gallery) => {
     current = parent
   }
   return { allowReactions: current.allowReactions, allowComments: current.allowComments }
+}
+
+export const getSitemapGalleries = async (request, reply) => {
+  try {
+    const rows = await db.select({
+      id: galleries.id,
+      slug: galleries.slug,
+      visibility: galleries.visibility,
+      parentGallery: galleries.parentGallery,
+    }).from(galleries)
+
+    return reply.code(200).send({ success: true, data: publicGallerySitemapRows(rows) })
+  } catch (error) {
+    request.log.error(error)
+    return reply.code(500).send({ success: false, message: "Galeries indisponibles" })
+  }
 }
 
 export const getAllGalleries = async (request, reply) => {
