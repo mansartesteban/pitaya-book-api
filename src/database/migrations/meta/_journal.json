@@ -330,6 +330,13 @@
       "when": 1791816880316,
       "tag": "0046_photo-download-policy",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793373442740,
+      "tag": "0047_permanent-qr",
+      "breakpoints": true
     }
   ]
 }

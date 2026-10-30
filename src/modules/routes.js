@@ -1,4 +1,5 @@
 import accountRoutes from "./account/account.routes.js"
+import qrRoutes from "./qr/qr.routes.js"
 import authRoutes from "./auth/auth.routes.js"
 import clientRoutes from "./clients/client.routes.js"
 import serviceRoutes from "./service/service.routes.js"
@@ -13,6 +14,7 @@ import memberLibraryRoutes from "./member/memberLibrary.routes.js"
 import commentReportsRoutes from "./gallery/commentReports.routes.js"
 
 export default async (app) => {
+  await app.register(qrRoutes, { prefix: "/api" })
   await app.register(authRoutes, { prefix: "/api/auth" })
   await app.register(userRoutes, { prefix: "/api/users" })
   await app.register(accountRoutes, { prefix: "/api/account" })
